@@ -1,0 +1,135 @@
+import { devToolsMiddleware } from '@ai-sdk/devtools'
+import { generateText, hasToolCall, tool, wrapLanguageModel } from 'ai'
+import fs from 'fs/promises'
+import path from 'path'
+import { z } from 'zod'
+import { executeCode, getInterfaceDocumentation, loadImage } from './executor'
+import { gpt52 } from '@/providers'
+
+function getModel() {
+    return wrapLanguageModel({ model: gpt52, middleware: devToolsMiddleware() })
+}
+
+/**
+ * Image Edit Agent Algorithm:
+ *
+ * 1. Original image is IMMUTABLE - never modified
+ * 2. Agent writes code that draws ALL annotations at once
+ * 3. Code is executed on a fresh copy of the original (pure function)
+ * 4. Result is saved and shown to the agent
+ * 5. If wrong, agent REWRITES the entire code (not appends)
+ * 6. Repeat until satisfied
+ *
+ * Each iteration: originalBuffer + code → resultBuffer
+ * No mutable state between executions.
+ */
+export async function codeExecAgent(inputPath: string, instruction: string) {
+    const { buffer: originalBuffer, metadata } = await loadImage(inputPath)
+    const { width, height } = metadata
+    const interfaceDocs = await getInterfaceDocumentation()
+
+    const outputDir = './data/debug'
+    await fs.mkdir(outputDir, { recursive: true })
+    let stepCount = 0
+
+    const systemPrompt = `You are an image annotation assistant. You generate JavaScript code to draw annotations on images.
+
+Image dimensions: ${width}x${height} pixels.
+
+${interfaceDocs}
+
+WORKFLOW:
+1. Analyze the image carefully
+2. Write code that draws ALL annotations in one go
+3. After execution, you'll see the result
+4. If the result is wrong, REWRITE your entire code from scratch (the image resets each time)
+5. When satisfied, call the finish tool
+
+IMPORTANT:
+- Each code execution starts from the ORIGINAL image (not cumulative)
+- Write ALL your drawing code in a single execution
+- If you need to fix something, rewrite the entire drawing code
+- All draw methods are async, use await`
+
+    const result = await generateText({
+        model: getModel(),
+        system: systemPrompt,
+        messages: [
+            {
+                role: 'user',
+                content: [
+                    { type: 'text', text: instruction },
+                    { type: 'image', image: originalBuffer },
+                ],
+            },
+        ],
+        tools: {
+            executeCode: tool({
+                description:
+                    'Execute JavaScript code to draw on the image. Returns the updated image.',
+                inputSchema: z.object({
+                    code: z.string().describe('JavaScript code using the ImageEditor API'),
+                }),
+                execute: async ({ code }) => {
+                    const buffer = await executeCode(code, originalBuffer, metadata)
+                    return { buffer, imageData: buffer.toString('base64') }
+                },
+                toModelOutput: (result) => ({
+                    type: 'content',
+                    value: [
+                        { type: 'text', text: 'Code executed. Updated image:' },
+                        {
+                            type: 'media',
+                            data: result.output.imageData,
+                            mediaType: 'image/png',
+                        },
+                    ],
+                }),
+            }),
+            finish: tool({
+                description: 'Call when annotations are complete',
+                inputSchema: z.object({
+                    summary: z.string().describe('Brief summary of what was drawn'),
+                }),
+                execute: async ({ summary }) => {
+                    console.log(`Finish: ${summary}`)
+                    return { done: true, summary }
+                },
+            }),
+        },
+        stopWhen: hasToolCall('finish'),
+        onStepFinish: async ({ toolResults }) => {
+            for (const result of toolResults ?? []) {
+                if (result.toolName === 'executeCode') {
+                    stepCount++
+                    const stepPath = `${outputDir}/step-${stepCount}.png`
+                    const output = result.output as { buffer: Buffer }
+                    await fs.writeFile(stepPath, output.buffer)
+                    console.log(`[Step ${stepCount}] Saved: ${stepPath}`)
+                }
+            }
+        },
+    })
+
+    console.log(`Final response: ${result.text}`)
+    console.log(`Total steps: ${result.steps.length}`)
+
+    // Get final buffer from last executeCode tool result
+    const lastExecuteResult = result.steps
+        .flatMap((s) => s.toolResults ?? [])
+        .findLast((r) => r.toolName === 'executeCode')
+
+    const ext = path.extname(inputPath)
+    const baseName = path.basename(inputPath, ext)
+    const outputPath = `./data/${baseName}-edited${ext}`
+
+    if (lastExecuteResult) {
+        const output = lastExecuteResult.output as { buffer: Buffer }
+        await fs.writeFile(outputPath, output.buffer)
+        console.log(`Saved to ${outputPath}`)
+    } else {
+        console.log('No code was executed, no output saved')
+    }
+
+    return outputPath
+}

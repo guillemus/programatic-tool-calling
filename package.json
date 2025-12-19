@@ -1,0 +1,24 @@
+{
+    "name": "image-editor",
+    "module": "src/index.ts",
+    "type": "module",
+    "private": true,
+    "scripts": {
+        "ts": "bun tsgo"
+    },
+    "devDependencies": {
+        "@ai-sdk/devtools": "^0.0.1-beta.0",
+        "@types/bun": "^1.3.4",
+        "@typescript/native-preview": "7.0.0-dev.20251216.1"
+    },
+    "peerDependencies": {
+        "typescript": "^5.9.3"
+    },
+    "dependencies": {
+        "@ai-sdk/openai": "^3.0.0-beta.104",
+        "ai": "^6.0.0-beta.159",
+        "glob": "^13.0.0",
+        "sharp": "^0.34.5",
+        "zod": "^4.1.13"
+    }
+}
