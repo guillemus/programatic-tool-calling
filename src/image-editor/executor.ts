@@ -8,7 +8,7 @@ export interface ImageMetadata {
 }
 
 export async function loadImage(
-    inputPath: string
+    inputPath: string,
 ): Promise<{ buffer: Buffer; metadata: ImageMetadata }> {
     const buffer = await fs.readFile(inputPath)
     const meta = await sharp(buffer).metadata()
@@ -25,7 +25,7 @@ export async function loadImage(
 export async function executeCode(
     code: string,
     originalBuffer: Buffer,
-    metadata: ImageMetadata
+    metadata: ImageMetadata,
 ): Promise<Buffer> {
     const { width, height } = metadata
     let buffer: Buffer = Buffer.from(originalBuffer)

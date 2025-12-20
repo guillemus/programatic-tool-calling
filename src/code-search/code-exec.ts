@@ -1,12 +1,7 @@
-import { devToolsMiddleware } from '@ai-sdk/devtools'
-import { generateText, hasToolCall, tool, wrapLanguageModel, zodSchema } from 'ai'
+import { generateText, hasToolCall, tool, zodSchema } from 'ai'
 import { z } from 'zod'
-import { executeCode, getInterfaceDocumentation } from './executor'
 import { gpt52 } from '../providers'
-
-function getModel() {
-    return wrapLanguageModel({ model: gpt52, middleware: devToolsMiddleware() })
-}
+import { executeCode, getInterface } from './executor'
 
 /**
  * Code Search Agent using code execution approach:
@@ -22,7 +17,7 @@ function getModel() {
  * - More efficient for complex multi-step searches
  */
 export async function codeSearchAgent(rootDir: string, question: string) {
-    const interfaceDocs = await getInterfaceDocumentation()
+    const interfaceDocs = await getInterface()
 
     const systemPrompt = `You are a code search assistant. You write JavaScript code to explore codebases and answer questions.
 
@@ -46,7 +41,7 @@ IMPORTANT:
 - All methods are async, use await`
 
     const result = await generateText({
-        model: getModel(),
+        model: gpt52,
         system: systemPrompt,
         messages: [
             {
@@ -69,7 +64,9 @@ IMPORTANT:
                 },
                 toModelOutput: (result: { toolCallId: string; input: unknown; output: any }) => {
                     const { answer, filesRead, searchesPerformed } = result.output
-                    let text = `Searches performed: ${searchesPerformed}\nFiles read: ${filesRead.length > 0 ? filesRead.join(', ') : 'none'}`
+                    let text = `Searches performed: ${searchesPerformed}\nFiles read: ${
+                        filesRead.length > 0 ? filesRead.join(', ') : 'none'
+                    }`
                     if (answer) {
                         text += `\n\nAnswer set: ${answer}`
                     }

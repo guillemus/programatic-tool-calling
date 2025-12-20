@@ -1,14 +1,9 @@
-import { devToolsMiddleware } from '@ai-sdk/devtools'
-import { generateText, hasToolCall, tool, wrapLanguageModel } from 'ai'
+import { gpt52 } from '@/providers'
+import { generateText, stepCountIs, tool } from 'ai'
 import fs from 'fs/promises'
 import path from 'path'
 import { z } from 'zod'
 import { executeCode, getInterfaceDocumentation, loadImage } from './executor'
-import { gpt52 } from '@/providers'
-
-function getModel() {
-    return wrapLanguageModel({ model: gpt52, middleware: devToolsMiddleware() })
-}
 
 /**
  * Image Edit Agent Algorithm:
@@ -43,7 +38,7 @@ WORKFLOW:
 2. Write code that draws ALL annotations in one go
 3. After execution, you'll see the result
 4. If the result is wrong, REWRITE your entire code from scratch (the image resets each time)
-5. When satisfied, call the finish tool
+5. When satisfied, respond with a text summary of what you drew (do NOT call any tools)
 
 IMPORTANT:
 - Each code execution starts from the ORIGINAL image (not cumulative)
@@ -52,7 +47,7 @@ IMPORTANT:
 - All draw methods are async, use await`
 
     const result = await generateText({
-        model: getModel(),
+        model: gpt52,
         system: systemPrompt,
         messages: [
             {
@@ -86,18 +81,8 @@ IMPORTANT:
                     ],
                 }),
             }),
-            finish: tool({
-                description: 'Call when annotations are complete',
-                inputSchema: z.object({
-                    summary: z.string().describe('Brief summary of what was drawn'),
-                }),
-                execute: async ({ summary }) => {
-                    console.log(`Finish: ${summary}`)
-                    return { done: true, summary }
-                },
-            }),
         },
-        stopWhen: hasToolCall('finish'),
+        stopWhen: stepCountIs(10),
         onStepFinish: async ({ toolResults }) => {
             for (const result of toolResults ?? []) {
                 if (result.toolName === 'executeCode') {

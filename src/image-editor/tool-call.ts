@@ -3,8 +3,8 @@ import { generateText, hasToolCall, tool, wrapLanguageModel, zodSchema } from 'a
 import fs from 'fs/promises'
 import path from 'path'
 import { z } from 'zod'
-import { ImageState, loadImage } from './state'
 import { gpt52 } from '../providers'
+import { ImageState, loadImage } from './state'
 
 function getModel() {
     return wrapLanguageModel({ model: gpt52, middleware: devToolsMiddleware() })
@@ -149,7 +149,10 @@ IMPORTANT:
                         y: z.number().describe('Y coordinate for text baseline'),
                         text: z.string().describe('Text to draw'),
                         color: z.string().optional().describe('Text color (default: red)'),
-                        fontSize: z.number().optional().describe('Font size in pixels (default: 20)'),
+                        fontSize: z
+                            .number()
+                            .optional()
+                            .describe('Font size in pixels (default: 20)'),
                     }),
                 ),
                 execute: async ({ x, y, text, color, fontSize }) => {

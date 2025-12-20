@@ -1,6 +1,6 @@
 import fs from 'fs/promises'
-import path from 'path'
 import { glob } from 'glob'
+import path from 'path'
 import type { CodeSearch } from './interface'
 
 export interface SearchResult {
@@ -90,7 +90,7 @@ export async function executeCode(code: string, rootDir: string): Promise<Search
     return { answer, filesRead, searchesPerformed }
 }
 
-export async function getInterfaceDocumentation(): Promise<string> {
+export async function getInterface(): Promise<string> {
     const filePath = new URL('./interface.ts', import.meta.url).pathname
     const content = await fs.readFile(filePath, 'utf-8')
     return content

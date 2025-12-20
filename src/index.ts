@@ -1,5 +1,3 @@
-import { codeExecAgent } from '@/image-editor/code-exec'
-import { toolCallAgent } from '@/image-editor/tool-call'
 import { codeSearchAgent } from '@/code-search/code-exec'
 
 // Image editor example
