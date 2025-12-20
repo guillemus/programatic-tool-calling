@@ -18,7 +18,7 @@ import { executeCode, getInterfaceDocumentation, loadImage } from './executor'
  * Each iteration: originalBuffer + code → resultBuffer
  * No mutable state between executions.
  */
-export async function codeExecAgent(inputPath: string, instruction: string) {
+export async function imageEditorAgent(inputPath: string, instruction: string) {
     const { buffer: originalBuffer, metadata } = await loadImage(inputPath)
     const { width, height } = metadata
     const interfaceDocs = await getInterfaceDocumentation()

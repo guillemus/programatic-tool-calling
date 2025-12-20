@@ -1,4 +1,4 @@
-import { codeSearchAgent } from '@/code-search/code-exec'
+import { codeSearchAgent } from './code-search/code-exec'
 
 // Image editor example
 const imageInputPath = './data/image.png'
@@ -10,6 +10,10 @@ const codebaseDir = '/Users/guillem/repos/ai-sdk'
 const searchQuestion = 'How do I use streamText with tool calls? Show me the relevant API.'
 
 // Switch between approaches:
-// await codeExecAgent(imageInputPath, imageInstruction)
+// await imageEditorAgent(imageInputPath, imageInstruction)
 // await toolCallAgent(imageInputPath, imageInstruction)
-await codeSearchAgent(codebaseDir, searchQuestion)
+const answer = await codeSearchAgent(codebaseDir, searchQuestion)
+console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+console.log('ANSWER:')
+console.log(answer)
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')

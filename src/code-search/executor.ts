@@ -4,15 +4,13 @@ import path from 'path'
 import type { CodeSearch } from './interface'
 
 export interface SearchResult {
-    answer: string
-    filesRead: string[]
-    searchesPerformed: number
+    result: unknown
+    metadata: {
+        filesRead: string[]
+        searchesPerformed: number
+    }
 }
 
-/**
- * Execute search code against a codebase.
- * Returns structured results from the search.
- */
 export async function executeCode(code: string, rootDir: string): Promise<SearchResult> {
     const filesRead: string[] = []
     let searchesPerformed = 0
@@ -22,18 +20,22 @@ export async function executeCode(code: string, rootDir: string): Promise<Search
             searchesPerformed++
             const fullPath = path.join(rootDir, searchPath)
             const matches = await glob(pattern, { cwd: fullPath, nodir: true })
-            return matches.map((m) => path.join(searchPath, m))
+            const result = matches.map((m) => path.join(searchPath, m))
+            return result
         },
 
-        grep: async (pattern, searchPath = '.') => {
+        grep: async (pattern, searchPath = '.', options = {}) => {
             searchesPerformed++
+            const limit = options.limit ?? 50
             const fullPath = path.join(rootDir, searchPath)
             const regex = new RegExp(pattern, 'g')
             const results: Array<{ file: string; line: number; content: string }> = []
 
-            async function searchDir(dir: string): Promise<void> {
+            async function searchDir(dir: string): Promise<boolean> {
+                if (results.length >= limit) return true
                 const entries = await fs.readdir(dir, { withFileTypes: true })
                 for (const entry of entries) {
+                    if (results.length >= limit) return true
                     const entryPath = path.join(dir, entry.name)
                     if (entry.isDirectory()) {
                         if (
@@ -41,7 +43,8 @@ export async function executeCode(code: string, rootDir: string): Promise<Search
                             entry.name !== 'node_modules' &&
                             entry.name !== 'dist'
                         ) {
-                            await searchDir(entryPath)
+                            const done = await searchDir(entryPath)
+                            if (done) return true
                         }
                     } else if (entry.isFile()) {
                         try {
@@ -54,6 +57,7 @@ export async function executeCode(code: string, rootDir: string): Promise<Search
                                         line: i + 1,
                                         content: lines[i].trim(),
                                     })
+                                    if (results.length >= limit) return true
                                 }
                                 regex.lastIndex = 0
                             }
@@ -62,32 +66,41 @@ export async function executeCode(code: string, rootDir: string): Promise<Search
                         }
                     }
                 }
+                return false
             }
 
             await searchDir(fullPath)
             return results
         },
 
-        readFile: async (filePath) => {
+        readFile: async (filePath, options = {}) => {
             const fullPath = path.join(rootDir, filePath)
             const content = await fs.readFile(fullPath, 'utf-8')
             filesRead.push(filePath)
-            return content
-        },
-    }
 
-    let answer = ''
-    const searchWithReturn = {
-        ...search,
-        setAnswer: (value: string) => {
-            answer = value
+            const lines = content.split('\n')
+            const startLine = options.startLine ?? 1
+            const maxLines = options.maxLines ?? 200
+            const endLine = Math.min(startLine + maxLines - 1, lines.length)
+
+            const selectedLines = lines.slice(startLine - 1, endLine)
+            const numbered = selectedLines.map((line, i) => `${startLine + i}: ${line}`).join('\n')
+            const result =
+                lines.length > endLine
+                    ? numbered + `\n... (${lines.length - endLine} more lines)`
+                    : numbered
+
+            return result
         },
     }
 
     const asyncFn = new Function('search', `return (async () => { ${code} })()`)
-    await asyncFn(searchWithReturn)
+    const result = await asyncFn(search)
 
-    return { answer, filesRead, searchesPerformed }
+    return {
+        result,
+        metadata: { filesRead, searchesPerformed },
+    }
 }
 
 export async function getInterface(): Promise<string> {

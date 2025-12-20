@@ -1,4 +1,4 @@
-import { generateText, hasToolCall, tool, zodSchema } from 'ai'
+import { generateText, stepCountIs, tool, zodSchema } from 'ai'
 import { z } from 'zod'
 import { gpt52 } from '../providers'
 import { executeCode, getInterface } from './executor'
@@ -25,18 +25,14 @@ Target directory: ${rootDir}
 
 ${interfaceDocs}
 
-ADDITIONAL METHOD:
-- search.setAnswer(text: string) - Set the final answer to return to the user
-
 WORKFLOW:
 1. Analyze the question
 2. Write code to search the codebase (list files, grep, read files)
-3. Based on results, either refine your search or call setAnswer with your findings
-4. When you have enough information, call the finish tool
+3. Based on results, either refine your search or respond with your findings
+4. When you have enough information, respond with a text answer (do NOT call any tools)
 
 IMPORTANT:
 - Each code execution is independent (no state between executions)
-- Use search.setAnswer() to store your findings before finishing
 - Combine operations efficiently (e.g. grep then read matching files)
 - All methods are async, use await`
 
@@ -59,58 +55,23 @@ IMPORTANT:
                     }),
                 ),
                 execute: async ({ code }) => {
+                    console.log('\n┌─ Executing Code ─────────────────────────────────')
+                    console.log(
+                        code
+                            .split('\n')
+                            .map((line) => '│ ' + line)
+                            .join('\n'),
+                    )
+                    console.log('└──────────────────────────────────────────────────\n')
                     const result = await executeCode(code, rootDir)
                     return result
                 },
-                toModelOutput: (result: { toolCallId: string; input: unknown; output: any }) => {
-                    const { answer, filesRead, searchesPerformed } = result.output
-                    let text = `Searches performed: ${searchesPerformed}\nFiles read: ${
-                        filesRead.length > 0 ? filesRead.join(', ') : 'none'
-                    }`
-                    if (answer) {
-                        text += `\n\nAnswer set: ${answer}`
-                    }
-                    return { type: 'text' as const, value: text }
-                },
-            }),
-            finish: tool({
-                description: 'Call when you have found the answer to the question',
-                inputSchema: zodSchema(
-                    z.object({
-                        answer: z.string().describe('The final answer to the question'),
-                    }),
-                ),
-                execute: async ({ answer }) => {
-                    console.log(`\n=== ANSWER ===\n${answer}\n`)
-                    return { done: true, answer }
-                },
             }),
         },
-        stopWhen: hasToolCall('finish'),
-        onStepFinish: ({ toolResults }) => {
-            for (const result of toolResults ?? []) {
-                if (result.toolName === 'executeCode') {
-                    const output = result.output as {
-                        filesRead: string[]
-                        searchesPerformed: number
-                    }
-                    console.log(
-                        `[Search] ${output.searchesPerformed} searches, ${output.filesRead.length} files read`,
-                    )
-                }
-            }
-        },
+        stopWhen: stepCountIs(20),
     })
 
     console.log(`Total steps: ${result.steps.length}`)
-
-    const lastFinish = result.steps
-        .flatMap((s) => s.toolResults ?? [])
-        .findLast((r) => r.toolName === 'finish')
-
-    if (lastFinish) {
-        return (lastFinish.output as { answer: string }).answer
-    }
 
     return result.text
 }
