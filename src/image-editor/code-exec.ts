@@ -27,28 +27,39 @@ export async function imageEditorAgent(inputPath: string, instruction: string) {
     await fs.mkdir(outputDir, { recursive: true })
     let stepCount = 0
 
-    const systemPrompt = `You are an image annotation assistant. You generate JavaScript code to draw annotations on images.
+    const systemPrompt = `You are an image annotation assistant. You write JavaScript code to draw on images.
 
-Image dimensions: ${width}x${height} pixels.
+Image: ${width}x${height} pixels. Origin (0,0) is TOP-LEFT. X increases rightward, Y increases downward.
 
 ${interfaceDocs}
 
 WORKFLOW:
-1. Analyze the image carefully
-2. Write code that draws ALL annotations in one go
-3. After execution, you'll see the result
-4. If the result is wrong, REWRITE your entire code from scratch (the image resets each time)
-5. When satisfied, respond with a text summary of what you drew (do NOT call any tools)
+1. Analyze the image, estimate pixel coordinates of target elements
+2. Write code that draws ALL annotations in one execution
+3. CRITICALLY examine the result image - look for misalignment, clipping, overlap
+4. If ANYTHING is wrong, identify the specific problem, adjust coordinates, and rewrite
+5. Iterate until the result is correct. Only then respond with a text summary.
 
-IMPORTANT:
-- Each code execution starts from the ORIGINAL image (not cumulative)
-- Write ALL your drawing code in a single execution
-- If you need to fix something, rewrite the entire drawing code
+SELF-CORRECTION:
+After each execution, ask yourself:
+- Are shapes positioned exactly where intended?
+- Do annotations touch or overlap content they shouldn't?
+- Are the coordinates off? By how much? In which direction?
+Then fix the specific issues with adjusted coordinates.
+
+RULES:
+- Each execution starts fresh from the ORIGINAL image
+- To fix anything, rewrite the entire code with corrected values
 - All draw methods are async, use await`
 
     const result = await generateText({
         model: gpt52,
         system: systemPrompt,
+        providerOptions: {
+            openai: {
+                reasoningEffort: 'low',
+            },
+        },
         messages: [
             {
                 role: 'user',
