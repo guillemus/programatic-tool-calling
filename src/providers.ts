@@ -8,21 +8,6 @@ const openai = createOpenAI({
 })
 
 export const gpt52 = wrapLanguageModel({
-    model: openai.responses('gpt-5'),
-    middleware: [
-        devToolsMiddleware(),
-        {
-            specificationVersion: 'v3',
-            transformParams: async ({ params }) => ({
-                ...params,
-                providerOptions: {
-                    ...params.providerOptions,
-                    openai: {
-                        ...params.providerOptions?.openai,
-                        reasoningEffort: 'minimal',
-                    },
-                },
-            }),
-        },
-    ],
+    model: openai.responses('gpt-5.2'),
+    middleware: devToolsMiddleware(),
 })
