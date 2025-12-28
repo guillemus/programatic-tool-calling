@@ -3,7 +3,9 @@ import { generateText, stepCountIs, tool } from 'ai'
 import fs from 'node:fs/promises'
 import { z } from 'zod'
 import { executeCode } from './executor'
-import interfaceDocs from './interface.ts?raw'
+
+// @ts-expect-error: there's surely a typesafe way to do this, can't find any right now
+import interfaceDocs from './interface' with { type: 'text' }
 
 /**
  * Simple Image Editor Agent Algorithm:
