@@ -71,11 +71,6 @@ RULES:
     const result = await generateText({
         model: gpt52,
         system: systemPrompt,
-        providerOptions: {
-            openai: {
-                reasoningEffort: 'low',
-            },
-        },
         messages: [
             {
                 role: 'user',
