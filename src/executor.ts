@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises'
 import sharp from 'sharp'
 import type {
     DrawingContext,
@@ -197,10 +196,4 @@ export async function executeCode(code: string, canvasSize = 512): Promise<Buffe
     const asyncFn = new Function('ctx', `return (async () => { ${code} })()`)
     await asyncFn(ctx)
     return ctx.toPNG()
-}
-
-export async function getInterfaceDocumentation(): Promise<string> {
-    const filePath = new URL('./interface.ts', import.meta.url).pathname
-    const content = await fs.readFile(filePath, 'utf-8')
-    return content
 }

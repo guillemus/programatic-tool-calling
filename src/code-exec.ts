@@ -2,7 +2,8 @@ import { gpt52 } from '@/providers'
 import { generateText, stepCountIs, tool } from 'ai'
 import fs from 'node:fs/promises'
 import { z } from 'zod'
-import { executeCode, getInterfaceDocumentation } from './executor'
+import { executeCode } from './executor'
+import interfaceDocs from './interface.ts?raw'
 
 /**
  * Simple Image Editor Agent Algorithm:
@@ -30,7 +31,6 @@ export async function simpleImageEditorAgent(
 ) {
     const name = options.name ?? 'output'
     const canvasSize = options.canvasSize ?? 512
-    const interfaceDocs = await getInterfaceDocumentation()
 
     const outputDir = './data'
     await fs.mkdir(outputDir, { recursive: true })
