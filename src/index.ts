@@ -1,4 +1,4 @@
-import { simpleImageEditorAgent } from '@/simple-image-editor/code-exec'
+import { simpleImageEditorAgent } from '@/code-exec'
 
 const tests = [
     // 1. Trivial - single shape
