@@ -11,9 +11,11 @@ export default defineConfig({
         port: 3000,
         allowedHosts: ['dev.test'],
     },
-    output: 'server',
+    output: 'static',
 
-    adapter: vercel(),
+    adapter: vercel({
+        webAnalytics: { enabled: true },
+    }),
 
     vite: {
         plugins: [tailwindcss()],

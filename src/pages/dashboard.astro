@@ -1,13 +1,8 @@
 ---
 import { DashboardPage } from '@/components'
 import Layout from '@/layout.astro'
-
-const user = Astro.locals.user
-if (!user) {
-    return Astro.redirect('/')
-}
 ---
 
 <Layout>
-    <DashboardPage user={user} client:load />
+    <DashboardPage client:load />
 </Layout>

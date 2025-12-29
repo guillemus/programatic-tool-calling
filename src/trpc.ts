@@ -1,4 +1,11 @@
 import { initTRPC, TRPCError } from '@trpc/server'
+
+export class UnauthorizedError extends TRPCError {
+    constructor(message = 'Not authenticated') {
+        super({ code: 'UNAUTHORIZED', message })
+        this.name = 'UnauthorizedError'
+    }
+}
 import { z } from 'zod'
 import { auth } from './auth'
 
@@ -18,7 +25,7 @@ export const publicProcedure = t.procedure
 
 export const authedProcedure = publicProcedure.use(({ ctx, next }) => {
     if (!ctx.user) {
-        throw new TRPCError({ code: 'UNAUTHORIZED' })
+        throw new UnauthorizedError()
     }
     return next({ ctx: { user: ctx.user } })
 })

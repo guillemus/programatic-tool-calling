@@ -1,7 +1,6 @@
 import { authClient } from '@/auth-client'
-import { TRPCProvider, trpc } from '@/trpc-client'
+import { QueryProvider, trpc } from '@/query-client'
 import { useQuery } from '@tanstack/react-query'
-import type { User } from 'better-auth'
 
 export function LogoutButton() {
     async function handleLogout() {
@@ -94,13 +93,32 @@ function TestAuthButton() {
     )
 }
 
-function DashboardContent(props: { user: User }) {
+function DashboardContent() {
+    const utils = trpc.useUtils()
+    const meQuery = useQuery(utils.me.queryOptions(undefined))
+
+    if (meQuery.isLoading) {
+        return (
+            <main className="min-h-screen bg-base-100 text-base-content">
+                <div className="max-w-2xl mx-auto px-6 py-24">
+                    <p className="text-secondary">Loading...</p>
+                </div>
+            </main>
+        )
+    }
+
+    if (meQuery.isError || !meQuery.data) {
+        return null
+    }
+
+    const user = meQuery.data.user
+
     return (
         <main className="min-h-screen bg-base-100 text-base-content">
             <div className="max-w-2xl mx-auto px-6 py-24">
                 <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
                 <p className="mt-4 text-lg text-secondary">
-                    Welcome, {props.user.name || props.user.email}
+                    Welcome, {user.name || user.email}
                 </p>
 
                 <div className="mt-12">
@@ -109,10 +127,10 @@ function DashboardContent(props: { user: User }) {
                             <p className="text-sm text-secondary uppercase tracking-wide">
                                 Account
                             </p>
-                            <p className="text-base-content">{props.user.email}</p>
-                            {props.user.image && (
+                            <p className="text-base-content">{user.email}</p>
+                            {user.image && (
                                 <img
-                                    src={props.user.image}
+                                    src={user.image}
                                     alt="avatar"
                                     className="w-16 h-16 rounded-full mt-4"
                                 />
@@ -133,10 +151,10 @@ function DashboardContent(props: { user: User }) {
     )
 }
 
-export function DashboardPage(props: { user: User }) {
+export function DashboardPage() {
     return (
-        <TRPCProvider>
-            <DashboardContent user={props.user} />
-        </TRPCProvider>
+        <QueryProvider>
+            <DashboardContent />
+        </QueryProvider>
     )
 }
