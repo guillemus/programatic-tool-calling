@@ -2,10 +2,10 @@ import { gpt52 } from '@/providers'
 import { generateText, stepCountIs, tool } from 'ai'
 import fs from 'node:fs/promises'
 import { z } from 'zod'
-import { executeCode } from './executor'
+import { executeCode } from '@/executor'
 
 // @ts-expect-error: there's surely a typesafe way to do this, can't find any right now
-import interfaceDocs from './interface' with { type: 'text' }
+import interfaceDocs from '@/interface' with { type: 'text' }
 
 /**
  * Simple Image Editor Agent Algorithm:

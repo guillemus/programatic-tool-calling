@@ -4,6 +4,8 @@
     "type": "module",
     "private": true,
     "scripts": {
+        "dev": "astro dev",
+        "build": "astro build",
         "ts": "bun tsgo"
     },
     "devDependencies": {
@@ -18,9 +20,21 @@
     },
     "dependencies": {
         "@ai-sdk/openai": "^3.0.1",
+        "@astrojs/react": "^4.4.2",
+        "@astrojs/vercel": "^9.0.2",
+        "@tailwindcss/vite": "^4.1.18",
+        "@trpc/client": "^11.8.1",
+        "@trpc/server": "^11.8.1",
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
         "ai": "^6.0.3",
+        "astro": "^5.16.6",
         "glob": "^13.0.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3",
         "sharp": "^0.34.5",
+        "superjson": "^2.2.6",
+        "tailwindcss": "^4.1.18",
         "zod": "^4.2.1"
     }
 }

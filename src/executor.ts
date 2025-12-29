@@ -7,7 +7,7 @@ import type {
     RectOpts,
     ShapeOpts,
     TextOpts,
-} from './interface'
+} from '@/interface'
 
 interface Element {
     layer: number
