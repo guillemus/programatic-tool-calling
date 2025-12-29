@@ -1,13 +1,20 @@
 {
-    "version": "7",
-    "dialect": "postgresql",
-    "entries": [
-        {
-            "idx": 0,
-            "version": "7",
-            "when": 1767011542882,
-            "tag": "0000_salty_the_hood",
-            "breakpoints": true
-        }
-    ]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1767011542882,
+      "tag": "0000_salty_the_hood",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1767026323113,
+      "tag": "0001_concerned_bill_hollister",
+      "breakpoints": true
+    }
+  ]
 }

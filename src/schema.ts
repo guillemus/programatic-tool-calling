@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm'
-import { boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 export const user = pgTable('user', {
     id: text('id').primaryKey(),
@@ -76,6 +76,7 @@ export const verification = pgTable(
 export const userRelations = relations(user, ({ many }) => ({
     sessions: many(session),
     accounts: many(account),
+    threads: many(thread),
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -89,5 +90,52 @@ export const accountRelations = relations(account, ({ one }) => ({
     user: one(user, {
         fields: [account.userId],
         references: [user.id],
+    }),
+}))
+
+export const thread = pgTable(
+    'thread',
+    {
+        id: text('id').primaryKey(),
+        userId: text('user_id')
+            .notNull()
+            .references(() => user.id, { onDelete: 'cascade' }),
+        prompt: text('prompt').notNull(),
+        status: text('status').notNull().default('pending'),
+        createdAt: timestamp('created_at').defaultNow().notNull(),
+        updatedAt: timestamp('updated_at')
+            .defaultNow()
+            .$onUpdate(() => new Date())
+            .notNull(),
+    },
+    (table) => [index('thread_userId_idx').on(table.userId)],
+)
+
+export const generation = pgTable(
+    'generation',
+    {
+        id: text('id').primaryKey(),
+        threadId: text('thread_id')
+            .notNull()
+            .references(() => thread.id, { onDelete: 'cascade' }),
+        stepNumber: integer('step_number').notNull(),
+        imageData: text('image_data').notNull(),
+        createdAt: timestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => [index('generation_threadId_idx').on(table.threadId)],
+)
+
+export const threadRelations = relations(thread, ({ one, many }) => ({
+    user: one(user, {
+        fields: [thread.userId],
+        references: [user.id],
+    }),
+    generations: many(generation),
+}))
+
+export const generationRelations = relations(generation, ({ one }) => ({
+    thread: one(thread, {
+        fields: [generation.threadId],
+        references: [thread.id],
     }),
 }))

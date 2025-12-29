@@ -1,10 +1,10 @@
 import type { AppRouter } from '@/trpc'
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { TRPCClientError, httpBatchLink } from '@trpc/client'
-import { createTRPCReact } from '@trpc/react-query'
+import { TRPCClientError, createTRPCClient, httpBatchLink } from '@trpc/client'
+import { createTRPCContext } from '@trpc/tanstack-react-query'
 import type { ReactNode } from 'react'
 
-export const trpc = createTRPCReact<AppRouter>()
+export const { TRPCProvider, useTRPC } = createTRPCContext<AppRouter>()
 
 function handleError(error: unknown) {
     if (error instanceof TRPCClientError) {
@@ -41,13 +41,13 @@ function getQueryClient() {
     return queryClient
 }
 
-let trpcClient: ReturnType<typeof trpc.createClient> | null = null
+let trpcClient: ReturnType<typeof createTRPCClient<AppRouter>> | null = null
 
 function getTrpcClient() {
     if (trpcClient) {
         return trpcClient
     }
-    trpcClient = trpc.createClient({
+    trpcClient = createTRPCClient<AppRouter>({
         links: [
             httpBatchLink({
                 url: '/api/trpc',
@@ -59,8 +59,8 @@ function getTrpcClient() {
 
 export function QueryProvider(props: { children: ReactNode }) {
     return (
-        <trpc.Provider client={getTrpcClient()} queryClient={getQueryClient()}>
+        <TRPCProvider trpcClient={getTrpcClient()} queryClient={getQueryClient()}>
             <QueryClientProvider client={getQueryClient()}>{props.children}</QueryClientProvider>
-        </trpc.Provider>
+        </TRPCProvider>
     )
 }

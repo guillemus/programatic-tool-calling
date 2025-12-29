@@ -1,7 +1,10 @@
+import { db } from '@/db'
 import { executeCode } from '@/executor'
 import { gpt52 } from '@/providers'
+import { generation, thread } from '@/schema'
 import { generateText, stepCountIs, tool } from 'ai'
-import fs from 'node:fs/promises'
+import { eq } from 'drizzle-orm'
+import { nanoid } from 'nanoid'
 import { z } from 'zod'
 
 // @ts-expect-error: there's surely a typesafe way to do this, can't find any right now
@@ -21,21 +24,22 @@ import interfaceDocs from '@/interface' with { type: 'text' }
  * No mutable state between executions.
  */
 export interface SimpleImageEditorOptions {
-    /** Output filename (without extension). Defaults to 'output' */
-    name?: string
+    /** Thread ID to save generations to */
+    threadId: string
     /** Canvas size in pixels. Defaults to 512 */
     canvasSize?: number
 }
 
 export async function simpleImageEditorAgent(
     instruction: string,
-    options: SimpleImageEditorOptions = {},
+    options: SimpleImageEditorOptions,
 ) {
-    const name = options.name ?? 'output'
+    const { threadId } = options
     const canvasSize = options.canvasSize ?? 512
 
-    const outputDir = './data'
-    await fs.mkdir(outputDir, { recursive: true })
+    // Update thread status to running
+    await db.update(thread).set({ status: 'running' }).where(eq(thread.id, threadId))
+
     let stepCount = 0
 
     const systemPrompt = `You are an image generation assistant. You write JavaScript code to create images using the DrawingContext API.
@@ -106,10 +110,14 @@ RULES:
             for (const result of toolResults ?? []) {
                 if (result.toolName === 'executeCode') {
                     stepCount++
-                    const stepPath = `${outputDir}/${name}.debug-${stepCount}.png`
-                    const output = result.output as { buffer: Buffer }
-                    await fs.writeFile(stepPath, output.buffer)
-                    console.log(`[${name}] Step ${stepCount}: ${stepPath}`)
+                    const output = result.output as { buffer: Buffer; imageData: string }
+                    await db.insert(generation).values({
+                        id: nanoid(),
+                        threadId,
+                        stepNumber: stepCount,
+                        imageData: output.imageData,
+                    })
+                    console.log(`[${threadId}] Step ${stepCount} saved to DB`)
                 }
             }
         },
@@ -118,20 +126,8 @@ RULES:
     console.log(`Final response: ${result.text}`)
     console.log(`Total steps: ${result.steps.length}`)
 
-    // Get final buffer from last executeCode tool result
-    const lastExecuteResult = result.steps
-        .flatMap((s) => s.toolResults ?? [])
-        .findLast((r) => r.toolName === 'executeCode')
+    // Update thread status
+    await db.update(thread).set({ status: 'completed' }).where(eq(thread.id, threadId))
 
-    const outputPath = `${outputDir}/${name}.png`
-
-    if (lastExecuteResult) {
-        const output = lastExecuteResult.output as { buffer: Buffer }
-        await fs.writeFile(outputPath, output.buffer)
-        console.log(`Saved to ${outputPath}`)
-    } else {
-        console.log('No code was executed, no output saved')
-    }
-
-    return outputPath
+    return threadId
 }
