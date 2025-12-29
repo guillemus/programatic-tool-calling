@@ -3,9 +3,6 @@ import { DashboardPage } from '@/components'
 import Layout from '@/layout.astro'
 
 const user = Astro.locals.user
-
-console.log(user)
-
 if (!user) {
     return Astro.redirect('/')
 }

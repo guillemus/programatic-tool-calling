@@ -6,6 +6,7 @@
         "moduleResolution": "bundler",
         "strict": true,
         "skipLibCheck": true,
+        "verbatimModuleSyntax": true,
         "esModuleInterop": true,
         "allowSyntheticDefaultImports": true,
         "resolveJsonModule": true,
@@ -13,12 +14,8 @@
             "@/*": ["./src/*"]
         },
         "jsx": "react-jsx",
-        "jsxImportSource": "react",
-        "plugins": [
-            {
-                "name": "@astrojs/ts-plugin"
-            }
-        ]
+        "jsxImportSource": "react"
     },
-    "include": ["src/**/*", ".astro/types.d.ts"]
+    "include": ["src/**/*", ".astro/types.d.ts"],
+    "exclude": ["dist"]
 }

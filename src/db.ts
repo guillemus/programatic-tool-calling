@@ -1,7 +1,15 @@
 import * as schema from '@/schema'
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
+import { attachDatabasePool } from '@vercel/functions'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Pool } from 'pg'
 import { env } from './env'
 
-const client = postgres(env.DATABASE_URL)
-export const db = drizzle(client, { schema })
+const pool = new Pool({
+    connectionString: env.DATABASE_URL,
+    idleTimeoutMillis: 5000,
+    max: 10,
+})
+
+attachDatabasePool(pool)
+
+export const db = drizzle(pool, { schema })

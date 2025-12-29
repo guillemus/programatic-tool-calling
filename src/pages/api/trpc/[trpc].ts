@@ -1,4 +1,4 @@
-import { appRouter } from '@/trpc'
+import { appRouter, createContext } from '@/trpc'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import type { APIRoute } from 'astro'
 
@@ -7,6 +7,6 @@ export const ALL: APIRoute = async ({ request }) => {
         endpoint: '/api/trpc',
         req: request,
         router: appRouter,
-        createContext: () => ({}),
+        createContext: () => createContext(request),
     })
 }

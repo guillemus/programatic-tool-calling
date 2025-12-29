@@ -9,6 +9,7 @@ import react from '@astrojs/react'
 export default defineConfig({
     server: {
         port: 3000,
+        allowedHosts: ['dev.test'],
     },
     output: 'server',
 

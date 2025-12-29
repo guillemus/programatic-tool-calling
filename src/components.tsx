@@ -1,4 +1,6 @@
 import { authClient } from '@/auth-client'
+import { TRPCProvider, trpc } from '@/trpc-client'
+import { useQuery } from '@tanstack/react-query'
 import type { User } from 'better-auth'
 
 export function LogoutButton() {
@@ -16,7 +18,7 @@ export function LogoutButton() {
 
 export function LoginButton() {
     function handleLogin() {
-        authClient.signIn.social({ provider: 'github' })
+        authClient.signIn.social({ provider: 'github', callbackURL: '/dashboard' })
     }
 
     return (
@@ -68,7 +70,31 @@ export function HomePage() {
     )
 }
 
-export function DashboardPage(props: { user: User }) {
+function TestAuthButton() {
+    const utils = trpc.useUtils()
+    const meQuery = useQuery({ ...utils.me.queryOptions(undefined), enabled: false })
+
+    function handleTest() {
+        meQuery.refetch()
+    }
+
+    return (
+        <div className="space-y-2">
+            <button onClick={handleTest} className="btn btn-secondary">
+                Test trpc.me
+            </button>
+            {meQuery.isLoading && <p className="text-secondary">Loading...</p>}
+            {meQuery.isError && <p className="text-error">Error: {meQuery.error.message}</p>}
+            {meQuery.isSuccess && (
+                <pre className="bg-base-300 p-2 rounded text-sm">
+                    {JSON.stringify(meQuery.data, null, 2)}
+                </pre>
+            )}
+        </div>
+    )
+}
+
+function DashboardContent(props: { user: User }) {
     return (
         <main className="min-h-screen bg-base-100 text-base-content">
             <div className="max-w-2xl mx-auto px-6 py-24">
@@ -96,9 +122,21 @@ export function DashboardPage(props: { user: User }) {
                 </div>
 
                 <div className="mt-12">
+                    <TestAuthButton />
+                </div>
+
+                <div className="mt-12">
                     <LogoutButton />
                 </div>
             </div>
         </main>
+    )
+}
+
+export function DashboardPage(props: { user: User }) {
+    return (
+        <TRPCProvider>
+            <DashboardContent user={props.user} />
+        </TRPCProvider>
     )
 }
