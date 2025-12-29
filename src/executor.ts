@@ -1,4 +1,3 @@
-import sharp from 'sharp'
 import type {
     DrawingContext,
     LineOpts,
@@ -8,6 +7,7 @@ import type {
     ShapeOpts,
     TextOpts,
 } from '@/interface'
+import sharp from 'sharp'
 
 interface Element {
     layer: number

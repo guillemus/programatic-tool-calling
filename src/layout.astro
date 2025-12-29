@@ -1,5 +1,6 @@
 ---
 import '@/styles/global.css'
+import { ClientRouter } from 'astro:transitions'
 ---
 
 <html lang="en">
@@ -7,6 +8,13 @@ import '@/styles/global.css'
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Image Editor</title>
+        <ClientRouter />
+        <style is:global>
+            ::view-transition-old(root),
+            ::view-transition-new(root) {
+                animation: none;
+            }
+        </style>
     </head>
     <body class="antialiased">
         <slot />

@@ -1,7 +1,7 @@
+import { env } from '@/env'
 import { devToolsMiddleware } from '@ai-sdk/devtools'
 import { createOpenAI } from '@ai-sdk/openai'
 import { wrapLanguageModel } from 'ai'
-import { env } from '@/env'
 
 const openai = createOpenAI({
     apiKey: env.OPENAI_API_KEY,
