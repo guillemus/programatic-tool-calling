@@ -3,7 +3,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { auth } from './auth'
-import { simpleImageEditorAgent } from './code-exec'
+import { imageEditorAgent } from './code-exec'
 import { db } from './db'
 import { generation, thread } from './schema'
 import { DbStorage } from './storage'
@@ -49,23 +49,19 @@ export const appRouter = router({
             where: and(eq(thread.userId, ctx.user.id), isNull(thread.deletedAt)),
             orderBy: desc(thread.createdAt),
             with: {
-                generations: true,
+                generations: {
+                    orderBy: desc(generation.createdAt),
+                    limit: 1,
+                },
             },
         })
-        return threads.map((t) => {
-            const finals = t.generations.filter((g) => g.type === 'final')
-            const latestFinal = finals.sort(
-                (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-            )[0]
-            return {
-                id: t.id,
-                prompt: t.prompt,
-                status: t.status,
-                createdAt: t.createdAt,
-                thumbnail: latestFinal?.imageData ?? null,
-                finalCount: finals.length,
-            }
-        })
+        return threads.map((t) => ({
+            id: t.id,
+            prompt: t.prompt,
+            status: t.status,
+            createdAt: t.createdAt,
+            thumbnail: t.generations[0]?.imageData ?? null,
+        }))
     }),
 
     getThread: authedProcedure
@@ -111,19 +107,18 @@ export const appRouter = router({
                 throw new TRPCError({ code: 'BAD_REQUEST', message: 'Thread already running' })
             }
 
+            await db.update(thread).set({ status: 'running' }).where(eq(thread.id, input.threadId))
+
             try {
-                await simpleImageEditorAgent(t.prompt, {
+                await imageEditorAgent(t.prompt, {
                     threadId: input.threadId,
-                    parentId: null,
                     storage: new DbStorage(),
                 })
+                await db.update(thread).set({ status: 'completed' }).where(eq(thread.id, input.threadId))
                 return { status: 'completed' }
             } catch (error) {
                 console.error(`[runThread ${input.threadId}] error:`, error)
-                await db
-                    .update(thread)
-                    .set({ status: 'failed' })
-                    .where(eq(thread.id, input.threadId))
+                await db.update(thread).set({ status: 'failed' }).where(eq(thread.id, input.threadId))
                 throw new TRPCError({
                     code: 'INTERNAL_SERVER_ERROR',
                     message: error instanceof Error ? error.message : 'Unknown error',
@@ -146,41 +141,6 @@ export const appRouter = router({
                 .set({ deletedAt: new Date() })
                 .where(eq(thread.id, input.threadId))
             return { success: true }
-        }),
-
-    continueFromGeneration: authedProcedure
-        .input(z.object({ generationId: z.string(), prompt: z.string().min(1) }))
-        .mutation(async ({ ctx, input }) => {
-            // Get the generation with its thread
-            const gen = await db.query.generation.findFirst({
-                where: eq(generation.id, input.generationId),
-                with: { thread: true },
-            })
-            if (!gen || gen.thread.userId !== ctx.user.id) {
-                throw new TRPCError({ code: 'NOT_FOUND', message: 'Generation not found' })
-            }
-            if (gen.thread.status === 'running') {
-                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Thread already running' })
-            }
-
-            try {
-                await simpleImageEditorAgent(input.prompt, {
-                    threadId: gen.threadId,
-                    parentId: input.generationId,
-                    initialCode: gen.code,
-                    initialImage: gen.imageData,
-                    storage: new DbStorage(),
-                })
-                return { status: 'completed' }
-            } catch (error) {
-                console.error(`[continueFromGeneration ${input.generationId}] error:`, error)
-                await db.update(thread).set({ status: 'failed' }).where(eq(thread.id, gen.threadId))
-                throw new TRPCError({
-                    code: 'INTERNAL_SERVER_ERROR',
-                    message: error instanceof Error ? error.message : 'Unknown error',
-                    cause: error,
-                })
-            }
         }),
 })
 

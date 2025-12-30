@@ -1,60 +1,16 @@
 import { authClient } from '@/auth-client'
 import { QueryProvider, useTRPC } from '@/query-client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-    ArrowLeft,
-    Bug,
-    ChevronDown,
-    ChevronLeft,
-    ChevronUp,
-    Code,
-    GitBranch,
-    Image,
-    Plus,
-    Trash2,
-    X,
-} from 'lucide-react'
+import { ChevronLeft, Code, Image, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from 'react-router'
-
-// =============================================================================
-// TYPES
-// =============================================================================
 
 type Generation = {
     id: string
     threadId: string
-    parentId: string | null
-    type: string
-    prompt: string | null
     code: string
     imageData: string
     createdAt: string
-}
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-function getFinalGenerations(generations: Generation[]): Generation[] {
-    return generations.filter((g) => g.type === 'final')
-}
-
-function getDebugChain(generations: Generation[], finalGen: Generation): Generation[] {
-    const chain: Generation[] = []
-    let current: Generation | undefined = finalGen
-    while (current) {
-        const parent = generations.find((g) => g.id === current!.parentId)
-        if (parent && parent.type === 'debug') {
-            chain.unshift(parent)
-        }
-        current = parent
-    }
-    return chain
-}
-
-function getChildCount(generations: Generation[], genId: string): number {
-    return generations.filter((g) => g.parentId === genId).length
 }
 
 function formatRelative(date: Date | string): string {
@@ -70,34 +26,23 @@ function formatRelative(date: Date | string): string {
     return days + 'd ago'
 }
 
-function getStatusDotClass(status: string): string {
-    if (status === 'completed') return 'bg-success'
-    if (status === 'running') return 'bg-warning'
-    if (status === 'failed') return 'bg-error'
-    return 'bg-secondary'
-}
-
-function getStatusColor(status: string): string {
-    if (status === 'completed') return 'text-success'
-    if (status === 'running') return 'text-warning'
-    if (status === 'failed') return 'text-error'
-    return 'text-secondary'
-}
-
-// =============================================================================
-// UTILITY COMPONENTS
-// =============================================================================
-
 function StatusDot(props: { status: string }) {
     const isPulsing = props.status === 'running' || props.status === 'pending'
-    const dotClass = getStatusDotClass(props.status)
+    let dotClass = 'bg-secondary'
+    if (props.status === 'completed') dotClass = 'bg-success'
+    if (props.status === 'running') dotClass = 'bg-warning'
+    if (props.status === 'failed') dotClass = 'bg-error'
     const pulseClass = isPulsing ? 'animate-pulse' : ''
     return <span className={`w-2 h-2 rounded-full ${dotClass} ${pulseClass}`} />
 }
 
 function StatusBadge(props: { status: string }) {
+    let color = 'text-secondary'
+    if (props.status === 'completed') color = 'text-success'
+    if (props.status === 'running') color = 'text-warning'
+    if (props.status === 'failed') color = 'text-error'
     return (
-        <span className={`flex items-center gap-1.5 ${getStatusColor(props.status)}`}>
+        <span className={`flex items-center gap-1.5 ${color}`}>
             <StatusDot status={props.status} />
             <span className="capitalize">{props.status}</span>
         </span>
@@ -154,10 +99,6 @@ function ProfileDropdown(props: { email: string; image: string | null }) {
     )
 }
 
-// =============================================================================
-// CARD COMPONENTS
-// =============================================================================
-
 function ThreadThumbnail(props: { imageData: string | null }) {
     if (props.imageData) {
         return (
@@ -204,7 +145,6 @@ function ThreadCard(props: {
     status: string
     createdAt: Date | string
     thumbnail: string | null
-    finalCount: number
 }) {
     return (
         <Link
@@ -222,184 +162,35 @@ function ThreadCard(props: {
                     <StatusBadge status={props.status} />
                     <span className="text-secondary">{formatRelative(props.createdAt)}</span>
                 </div>
-                {props.finalCount > 0 && (
-                    <div className="mt-2 pt-2 border-t border-base-300 text-xs text-secondary">
-                        {props.finalCount} generation{props.finalCount > 1 ? 's' : ''}
-                    </div>
-                )}
             </div>
         </Link>
     )
 }
 
-function GenerationNode(props: {
-    generation: Generation
-    childCount: number
-    isRunning: boolean
-    onSelect: (gen: Generation) => void
-}) {
-    const gen = props.generation
-    const isDisabled = props.isRunning
-    const hasChildren = props.childCount > 1
-
-    function handleClick() {
-        if (!isDisabled) {
-            props.onSelect(gen)
-        }
-    }
-
-    const disabledClass = isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-
-    return (
-        <button
-            type="button"
-            onClick={handleClick}
-            disabled={isDisabled}
-            className={`w-full bg-base-200 rounded-xl overflow-hidden transition-colors hover:bg-base-300 ${disabledClass} relative`}
-        >
-            {hasChildren && (
-                <div
-                    className="absolute top-2 right-2 z-10 bg-base-100/80 rounded-full p-1"
-                    title="Has branches"
-                >
-                    <GitBranch size={12} className="text-primary" />
-                </div>
-            )}
-            <div className="aspect-square">
-                {gen.imageData ? (
-                    <img
-                        src={`data:image/png;base64,${gen.imageData}`}
-                        alt=""
-                        className="w-full h-full object-cover"
-                    />
-                ) : (
-                    <div className="w-full h-full bg-base-300 flex items-center justify-center">
-                        <span className="text-secondary/50 text-xs">No image</span>
-                    </div>
-                )}
-            </div>
-            <div className="p-3 text-left">
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-primary">Final</span>
-                    <span className="text-xs text-secondary">{formatRelative(gen.createdAt)}</span>
-                </div>
-            </div>
-        </button>
-    )
-}
-
-function DebugStepItem(props: { generation: Generation; onSelect: (gen: Generation) => void }) {
-    const gen = props.generation
-    return (
-        <div
-            className="flex items-center gap-3 p-2 rounded-lg transition-colors cursor-pointer hover:bg-base-200"
-            onClick={() => props.onSelect(gen)}
-        >
-            <div className="w-12 h-12 rounded-lg overflow-hidden bg-base-300 flex-shrink-0">
-                {gen.imageData ? (
-                    <img
-                        src={`data:image/png;base64,${gen.imageData}`}
-                        alt=""
-                        className="w-full h-full object-cover"
-                    />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-secondary/50">
-                        ?
-                    </div>
-                )}
-            </div>
-            <div className="flex-1 min-w-0">
-                <span className="text-xs text-warning font-medium">Debug</span>
-                <p className="text-xs text-secondary truncate">{formatRelative(gen.createdAt)}</p>
-            </div>
-        </div>
-    )
-}
-
-// =============================================================================
-// MODAL COMPONENT
-// =============================================================================
-
-function GenerationModal(props: {
-    generation: Generation | null
-    allGenerations: Generation[]
-    onClose: () => void
-    onEdit: (baseGen: Generation, prompt: string) => void
-    isEditing?: boolean
-}) {
+function GenerationModal(props: { generation: Generation | null; onClose: () => void }) {
     const modalRef = useRef<HTMLDialogElement>(null)
-    const [editPrompt, setEditPrompt] = useState('')
-    const [showDebug, setShowDebug] = useState(false)
-    const [viewingGen, setViewingGen] = useState<Generation | null>(null)
-
-    const displayGen = viewingGen || props.generation
 
     useEffect(() => {
         if (props.generation) {
             modalRef.current?.showModal()
-            setViewingGen(null)
-            setShowDebug(false)
         } else {
             modalRef.current?.close()
         }
     }, [props.generation])
 
-    function handleClose() {
-        props.onClose()
-        setViewingGen(null)
-        setShowDebug(false)
-    }
-
-    function handleEditSubmit(e: React.FormEvent) {
-        e.preventDefault()
-        if (!editPrompt.trim() || !displayGen) return
-        props.onEdit(displayGen, editPrompt.trim())
-        setEditPrompt('')
-    }
-
-    function handleViewDebug(gen: Generation) {
-        setViewingGen(gen)
-    }
-
-    function handleBackToFinal() {
-        setViewingGen(null)
-    }
-
     if (!props.generation) {
         return <dialog ref={modalRef} className="modal" />
     }
 
-    const debugChain = getDebugChain(props.allGenerations, props.generation)
-    const isViewingDebug = viewingGen !== null
+    const gen = props.generation
 
     return (
-        <dialog ref={modalRef} className="modal" onClose={handleClose}>
+        <dialog ref={modalRef} className="modal" onClose={props.onClose}>
             <div className="modal-box max-w-5xl max-h-[90vh] p-0 flex flex-col">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-base-300 flex-shrink-0">
-                    <div className="flex items-center gap-3">
-                        {isViewingDebug && (
-                            <button
-                                onClick={handleBackToFinal}
-                                className="btn btn-ghost btn-sm btn-square"
-                            >
-                                <ArrowLeft size={16} />
-                            </button>
-                        )}
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h2 className="font-semibold text-lg">
-                                    {isViewingDebug ? 'Debug Step' : 'Generation'}
-                                </h2>
-                                {isViewingDebug ? (
-                                    <span className="badge badge-warning badge-sm">Debug</span>
-                                ) : (
-                                    <span className="badge badge-success badge-sm">Final</span>
-                                )}
-                            </div>
-                            <p className="text-sm opacity-60">
-                                {displayGen && formatRelative(displayGen.createdAt)}
-                            </p>
-                        </div>
+                    <div>
+                        <h2 className="font-semibold text-lg">Generation</h2>
+                        <p className="text-sm opacity-60">{formatRelative(gen.createdAt)}</p>
                     </div>
                     <form method="dialog">
                         <button className="btn btn-sm btn-circle btn-ghost">
@@ -415,73 +206,17 @@ function GenerationModal(props: {
                         </div>
                         <div className="flex-1 overflow-auto min-h-0">
                             <pre className="p-4 text-sm font-mono bg-neutral text-neutral-content whitespace-pre-wrap">
-                                {displayGen?.code || '// No code available'}
+                                {gen.code}
                             </pre>
                         </div>
-
-                        {debugChain.length > 0 && !isViewingDebug && (
-                            <div className="border-t border-base-300">
-                                <button
-                                    onClick={() => setShowDebug(!showDebug)}
-                                    className="w-full px-4 py-3 flex items-center justify-between text-sm hover:bg-base-200 transition-colors"
-                                >
-                                    <span className="flex items-center gap-2">
-                                        <Bug size={16} className="text-warning" />
-                                        Debug steps ({debugChain.length})
-                                    </span>
-                                    {showDebug ? (
-                                        <ChevronUp size={16} />
-                                    ) : (
-                                        <ChevronDown size={16} />
-                                    )}
-                                </button>
-                                {showDebug && (
-                                    <div className="px-4 pb-4 space-y-1">
-                                        {debugChain.map((debug) => (
-                                            <DebugStepItem
-                                                key={debug.id}
-                                                generation={debug}
-                                                onSelect={handleViewDebug}
-                                            />
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {!isViewingDebug && (
-                            <div className="p-4 border-t border-base-300">
-                                <form onSubmit={handleEditSubmit} className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={editPrompt}
-                                        onChange={(e) => setEditPrompt(e.target.value)}
-                                        placeholder="Describe changes..."
-                                        className="input input-bordered flex-1"
-                                        disabled={props.isEditing}
-                                    />
-                                    <button
-                                        type="submit"
-                                        className="bg-neutral text-neutral-content px-6 py-2 rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
-                                        disabled={!editPrompt.trim() || props.isEditing}
-                                    >
-                                        {props.isEditing ? 'Editing...' : 'Edit'}
-                                    </button>
-                                </form>
-                            </div>
-                        )}
                     </div>
                     <div className="w-1/2 bg-base-200 flex items-center justify-center p-6 overflow-auto">
                         <div className="w-full aspect-square rounded-lg overflow-hidden bg-base-300 flex items-center justify-center">
-                            {displayGen?.imageData ? (
-                                <img
-                                    src={`data:image/png;base64,${displayGen.imageData}`}
-                                    alt=""
-                                    className="w-full h-full object-cover"
-                                />
-                            ) : (
-                                <span className="opacity-50">No image</span>
-                            )}
+                            <img
+                                src={`data:image/png;base64,${gen.imageData}`}
+                                alt=""
+                                className="w-full h-full object-cover"
+                            />
                         </div>
                     </div>
                 </div>
@@ -492,10 +227,6 @@ function GenerationModal(props: {
         </dialog>
     )
 }
-
-// =============================================================================
-// PAGE COMPONENTS
-// =============================================================================
 
 function DashboardPage() {
     const trpc = useTRPC()
@@ -551,7 +282,6 @@ function DashboardPage() {
                                     status={thread.status}
                                     createdAt={thread.createdAt}
                                     thumbnail={thread.thumbnail}
-                                    finalCount={thread.finalCount}
                                 />
                             ))}
                         </div>
@@ -661,21 +391,6 @@ function ThreadDetailPage() {
         },
     })
 
-    const continueMutation = useMutation({
-        ...trpc.continueFromGeneration.mutationOptions(),
-        onSuccess: () => {
-            queryClient.invalidateQueries({
-                queryKey: trpc.getThread.queryKey({ threadId: id! }),
-            })
-            setSelectedGeneration(null)
-        },
-        onError: () => {
-            queryClient.invalidateQueries({
-                queryKey: trpc.getThread.queryKey({ threadId: id! }),
-            })
-        },
-    })
-
     const deleteMutation = useMutation({
         ...trpc.deleteThread.mutationOptions(),
         onSuccess: () => {
@@ -715,19 +430,6 @@ function ThreadDetailPage() {
     const thread = threadQuery.data
     const isRunning = thread.status === 'running' || thread.status === 'pending'
     const generations = thread.generations as Generation[]
-    const finalGenerations = getFinalGenerations(generations)
-
-    function handleSelectGeneration(gen: Generation) {
-        setSelectedGeneration(gen)
-    }
-
-    function handleCloseModal() {
-        setSelectedGeneration(null)
-    }
-
-    function handleEdit(baseGen: Generation, prompt: string) {
-        continueMutation.mutate({ generationId: baseGen.id, prompt })
-    }
 
     return (
         <>
@@ -764,7 +466,7 @@ function ThreadDetailPage() {
                 </header>
                 <main className="flex-1 overflow-auto">
                     <div className="max-w-6xl mx-auto px-6 py-6">
-                        {finalGenerations.length === 0 ? (
+                        {generations.length === 0 ? (
                             <div className="text-center py-20">
                                 {isRunning && (
                                     <span className="loading loading-spinner loading-lg text-primary mb-4" />
@@ -772,52 +474,41 @@ function ThreadDetailPage() {
                                 <p className="text-secondary">
                                     {isRunning ? 'Generating your image...' : 'No generations yet'}
                                 </p>
-                                {!isRunning && generations.length > 0 && (
-                                    <p className="text-xs text-secondary/60 mt-2">
-                                        {generations.length} debug step
-                                        {generations.length > 1 ? 's' : ''} in progress
-                                    </p>
-                                )}
                             </div>
                         ) : (
-                            <>
-                                <div className="mb-4">
-                                    <p className="text-sm text-secondary">
-                                        {finalGenerations.length} generation
-                                        {finalGenerations.length > 1 ? 's' : ''} - Click to view
-                                        code and edit
-                                    </p>
-                                </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                                    {finalGenerations.map((gen) => (
-                                        <GenerationNode
-                                            key={gen.id}
-                                            generation={gen}
-                                            isRunning={isRunning}
-                                            childCount={getChildCount(generations, gen.id)}
-                                            onSelect={handleSelectGeneration}
-                                        />
-                                    ))}
-                                </div>
-                            </>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                                {generations.map((gen) => (
+                                    <button
+                                        key={gen.id}
+                                        onClick={() => setSelectedGeneration(gen)}
+                                        className="bg-base-200 rounded-xl overflow-hidden transition-colors hover:bg-base-300"
+                                    >
+                                        <div className="aspect-square">
+                                            <img
+                                                src={`data:image/png;base64,${gen.imageData}`}
+                                                alt=""
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </div>
+                                        <div className="p-3 text-left">
+                                            <span className="text-xs text-secondary">
+                                                {formatRelative(gen.createdAt)}
+                                            </span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
                         )}
                     </div>
                 </main>
             </div>
             <GenerationModal
                 generation={selectedGeneration}
-                allGenerations={generations}
-                onClose={handleCloseModal}
-                onEdit={handleEdit}
-                isEditing={continueMutation.isPending}
+                onClose={() => setSelectedGeneration(null)}
             />
         </>
     )
 }
-
-// =============================================================================
-// APP
-// =============================================================================
 
 function AppRoutes() {
     return (

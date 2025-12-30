@@ -1,4 +1,4 @@
-import { simpleImageEditorAgent } from '@/code-exec'
+import { imageEditorAgent } from '@/code-exec'
 import { FileStorage } from '@/storage'
 
 const PROMPT = 'Generate a pelican riding a bicycle'
@@ -6,9 +6,8 @@ const PROMPT = 'Generate a pelican riding a bicycle'
 async function main() {
     console.log(`Prompt: "${PROMPT}"`)
 
-    await simpleImageEditorAgent(PROMPT, {
+    await imageEditorAgent(PROMPT, {
         threadId: 'cli',
-        parentId: null,
         storage: new FileStorage('./output'),
     })
 

@@ -1,53 +1,25 @@
 import { executeCode } from '@/executor'
-import { gpt52 } from '@/providers'
+import { gemini3flash } from '@/providers'
 import type { Storage } from '@/storage'
 import { generateText, stepCountIs, tool } from 'ai'
-import { nanoid } from 'nanoid'
 import { z } from 'zod'
 
-// @ts-expect-error: there's surely a typesafe way to do this, can't find any right now
+// @ts-expect-error: importing as text
 import interfaceDocs from '@/interface' with { type: 'text' }
 
-/**
- * Simple Image Editor Agent Algorithm:
- *
- * 1. Agent receives a description of the image to create
- * 2. Agent writes code using the DrawingContext API
- * 3. Code is executed to produce a PNG
- * 4. Result is shown to the agent
- * 5. If not satisfied, agent REWRITES the entire code
- * 6. Repeat until satisfied
- *
- * Each iteration: code → PNG
- * No mutable state between executions.
- */
-export interface SimpleImageEditorOptions {
-    /** Thread ID to save generations to */
+export interface ImageEditorOptions {
     threadId: string
-    /** Parent generation ID (null for new thread, genId for branching) */
-    parentId: string | null
-    /** Storage strategy for persisting generations */
     storage: Storage
-    /** Canvas size in pixels. Defaults to 512 */
     canvasSize?: number
-    /** Initial code to start from (for continuing from existing generation) */
-    initialCode?: string
-    /** Initial image data base64 (for continuing from existing generation) */
-    initialImage?: string
 }
 
-export async function simpleImageEditorAgent(
-    instruction: string,
-    options: SimpleImageEditorOptions,
-) {
-    const { threadId, parentId, storage, initialCode, initialImage } = options
+export async function imageEditorAgent(instruction: string, options: ImageEditorOptions) {
+    const { threadId, storage } = options
     const canvasSize = options.canvasSize ?? 512
 
-    console.log(`[agent ${threadId}] starting`)
+    console.log(`[agent] starting`)
 
-    await storage.updateThreadStatus(threadId, 'running')
-
-    let lastGenerationId: string | null = parentId
+    let lastResult: { code: string; imageData: string } | null = null
 
     const systemPrompt = `You are an image generation assistant. You write JavaScript code to create images using the DrawingContext API.
 
@@ -79,33 +51,10 @@ RULES:
 - All methods are sync and chainable
 - Use ctx.method() syntax (the ctx object is provided)`
 
-    const messages: Parameters<typeof generateText>[0]['messages'] = []
-
-    if (initialCode && initialImage) {
-        // Continuing from existing generation
-        messages.push({
-            role: 'user',
-            content: [
-                {
-                    type: 'text',
-                    text: 'Here is the current code and image. Modify it according to my next instruction.',
-                },
-                { type: 'text', text: `Current code:\n\`\`\`javascript\n${initialCode}\n\`\`\`` },
-                { type: 'image', image: Buffer.from(initialImage, 'base64') },
-                { type: 'text', text: `Instruction: ${instruction}` },
-            ],
-        })
-    } else {
-        messages.push({
-            role: 'user',
-            content: instruction,
-        })
-    }
-
     const result = await generateText({
-        model: gpt52,
+        model: gemini3flash,
         system: systemPrompt,
-        messages,
+        messages: [{ role: 'user', content: instruction }],
         tools: {
             executeCode: tool({
                 description:
@@ -114,19 +63,16 @@ RULES:
                     code: z.string().describe('JavaScript code using the DrawingContext API'),
                 }),
                 execute: async ({ code }) => {
-                    console.log(`[agent ${threadId}] executing code`)
+                    console.log(`[agent] executing code`)
                     try {
                         const buffer = await executeCode(code, canvasSize)
-                        return {
-                            success: true as const,
-                            code,
-                            buffer,
-                            imageData: buffer.toString('base64'),
-                        }
+                        const imageData = buffer.toString('base64')
+                        lastResult = { code, imageData }
+                        return { success: true as const, imageData }
                     } catch (err) {
                         const message = err instanceof Error ? err.message : String(err)
-                        console.log(`[agent ${threadId}] code execution failed: ${message}`)
-                        return { success: false as const, code, error: message }
+                        console.log(`[agent] code execution failed: ${message}`)
+                        return { success: false as const, error: message }
                     }
                 },
                 toModelOutput: (result) => {
@@ -145,58 +91,20 @@ RULES:
                         type: 'content',
                         value: [
                             { type: 'text', text: 'Code executed. Generated image:' },
-                            {
-                                type: 'media',
-                                data: result.output.imageData,
-                                mediaType: 'image/png',
-                            },
+                            { type: 'media', data: result.output.imageData, mediaType: 'image/png' },
                         ],
                     }
                 },
             }),
         },
         stopWhen: stepCountIs(10),
-        onStepFinish: async ({ toolResults }) => {
-            for (const result of toolResults ?? []) {
-                if (result.toolName === 'executeCode') {
-                    const output = result.output as {
-                        success: boolean
-                        code: string
-                        buffer?: Buffer
-                        imageData?: string
-                        error?: string
-                    }
-                    if (!output.success) {
-                        console.log(
-                            `[${threadId}] Skipping save - execution failed: ${output.error}`,
-                        )
-                        continue
-                    }
-                    const genId = nanoid()
-                    await storage.saveGeneration({
-                        id: genId,
-                        threadId,
-                        parentId: lastGenerationId,
-                        type: 'debug',
-                        prompt: instruction,
-                        code: output.code,
-                        imageData: output.imageData!,
-                    })
-                    lastGenerationId = genId
-                    console.log(`[${threadId}] Generation ${genId} saved`)
-                }
-            }
-        },
     })
 
-    console.log(`[agent ${threadId}] completed, steps: ${result.steps.length}`)
+    console.log(`[agent] completed, steps: ${result.steps.length}`)
 
-    // Mark last generation as final
-    if (lastGenerationId && lastGenerationId !== parentId) {
-        await storage.markGenerationAsFinal(lastGenerationId)
+    if (lastResult) {
+        await storage.save(threadId, lastResult)
     }
-
-    await storage.updateThreadStatus(threadId, 'completed')
 
     return threadId
 }

@@ -1,66 +1,45 @@
 import { db } from '@/db'
-import { generation, thread } from '@/schema'
-import { eq } from 'drizzle-orm'
+import { generation } from '@/schema'
 import { mkdir, writeFile } from 'fs/promises'
+import { nanoid } from 'nanoid'
 import { join } from 'path'
 
-export interface GenerationData {
-    id: string
-    threadId: string
-    parentId: string | null
-    type: 'debug' | 'final'
-    prompt: string
+export interface GenerationResult {
     code: string
     imageData: string
 }
 
 export interface Storage {
-    updateThreadStatus(threadId: string, status: string): Promise<void>
-    saveGeneration(data: GenerationData): Promise<void>
-    markGenerationAsFinal(id: string): Promise<void>
+    save(threadId: string, result: GenerationResult): Promise<void>
 }
 
 export class DbStorage implements Storage {
-    async updateThreadStatus(threadId: string, status: string) {
-        await db.update(thread).set({ status }).where(eq(thread.id, threadId))
-    }
-
-    async saveGeneration(data: GenerationData) {
-        await db.insert(generation).values(data)
-    }
-
-    async markGenerationAsFinal(id: string) {
-        await db.update(generation).set({ type: 'final' }).where(eq(generation.id, id))
+    async save(threadId: string, result: GenerationResult) {
+        await db.insert(generation).values({
+            id: nanoid(),
+            threadId,
+            code: result.code,
+            imageData: result.imageData,
+        })
     }
 }
 
 export class FileStorage implements Storage {
     private outputDir: string
-    private stepCount = 0
 
     constructor(outputDir = './output') {
         this.outputDir = outputDir
     }
 
-    async updateThreadStatus(_threadId: string, status: string) {
-        console.log(`[file-storage] status: ${status}`)
-    }
-
-    async saveGeneration(data: GenerationData) {
+    async save(_threadId: string, result: GenerationResult) {
         await mkdir(this.outputDir, { recursive: true })
-        this.stepCount++
 
-        const imgPath = join(this.outputDir, `step-${this.stepCount}.png`)
-        const codePath = join(this.outputDir, `step-${this.stepCount}.js`)
+        const imgPath = join(this.outputDir, 'output.png')
+        const codePath = join(this.outputDir, 'output.js')
 
-        await writeFile(imgPath, Buffer.from(data.imageData, 'base64'))
-        await writeFile(codePath, data.code)
+        await writeFile(imgPath, Buffer.from(result.imageData, 'base64'))
+        await writeFile(codePath, result.code)
 
-        console.log(`[file-storage] saved: ${imgPath}`)
-    }
-
-    async markGenerationAsFinal(id: string) {
-        // Copy last step as final
-        console.log(`[file-storage] final generation: ${id}`)
+        console.log(`Saved: ${imgPath}`)
     }
 }

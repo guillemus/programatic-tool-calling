@@ -119,17 +119,11 @@ export const generation = pgTable(
         threadId: text('thread_id')
             .notNull()
             .references(() => thread.id, { onDelete: 'cascade' }),
-        parentId: text('parent_id'),
-        type: text('type').notNull().default('final'),
-        prompt: text('prompt'),
         code: text('code').notNull(),
         imageData: text('image_data').notNull(),
         createdAt: timestamp('created_at').defaultNow().notNull(),
     },
-    (table) => [
-        index('generation_threadId_idx').on(table.threadId),
-        index('generation_parentId_idx').on(table.parentId),
-    ],
+    (table) => [index('generation_threadId_idx').on(table.threadId)],
 )
 
 export const threadRelations = relations(thread, ({ one, many }) => ({
@@ -140,15 +134,9 @@ export const threadRelations = relations(thread, ({ one, many }) => ({
     generations: many(generation),
 }))
 
-export const generationRelations = relations(generation, ({ one, many }) => ({
+export const generationRelations = relations(generation, ({ one }) => ({
     thread: one(thread, {
         fields: [generation.threadId],
         references: [thread.id],
     }),
-    parent: one(generation, {
-        fields: [generation.parentId],
-        references: [generation.id],
-        relationName: 'generationTree',
-    }),
-    children: many(generation, { relationName: 'generationTree' }),
 }))
