@@ -1,6 +1,5 @@
 ---
 import '@/styles/global.css'
-import { ClientRouter } from 'astro:transitions'
 ---
 
 <html lang="en" data-theme="light">
@@ -8,13 +7,6 @@ import { ClientRouter } from 'astro:transitions'
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Image Editor</title>
-        <ClientRouter />
-        <style is:global>
-            ::view-transition-old(root),
-            ::view-transition-new(root) {
-                animation: none;
-            }
-        </style>
         {
             import.meta.env.DEV && (
                 <script is:inline src="//unpkg.com/react-grab/dist/index.global.js" />

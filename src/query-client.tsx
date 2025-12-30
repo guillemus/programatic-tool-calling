@@ -14,13 +14,10 @@ function handleError(error: unknown) {
     }
 }
 
-let queryClient: QueryClient | null = null
+let clientQueryClient: QueryClient | null = null
 
-function getQueryClient() {
-    if (queryClient) {
-        return queryClient
-    }
-    queryClient = new QueryClient({
+function makeQueryClient() {
+    return new QueryClient({
         queryCache: new QueryCache({
             onError: handleError,
         }),
@@ -38,23 +35,40 @@ function getQueryClient() {
             },
         },
     })
-    return queryClient
 }
 
-let trpcClient: ReturnType<typeof createTRPCClient<AppRouter>> | null = null
-
-function getTrpcClient() {
-    if (trpcClient) {
-        return trpcClient
+// On server: always create fresh QueryClient (avoid cross-request state pollution)
+// On client: cache it
+function getQueryClient() {
+    if (typeof window === 'undefined') {
+        return makeQueryClient()
     }
-    trpcClient = createTRPCClient<AppRouter>({
+    if (!clientQueryClient) {
+        clientQueryClient = makeQueryClient()
+    }
+    return clientQueryClient
+}
+
+let clientTrpcClient: ReturnType<typeof createTRPCClient<AppRouter>> | null = null
+
+function makeTrpcClient() {
+    return createTRPCClient<AppRouter>({
         links: [
             httpBatchLink({
                 url: '/api/trpc',
             }),
         ],
     })
-    return trpcClient
+}
+
+function getTrpcClient() {
+    if (typeof window === 'undefined') {
+        return makeTrpcClient()
+    }
+    if (!clientTrpcClient) {
+        clientTrpcClient = makeTrpcClient()
+    }
+    return clientTrpcClient
 }
 
 export function QueryProvider(props: { children: ReactNode }) {

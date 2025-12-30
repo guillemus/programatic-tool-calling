@@ -1,0 +1,18 @@
+---
+import Layout from '@/layout.astro'
+import { App } from '@/app'
+
+export const prerender = false
+
+const { app } = Astro.params
+const validPaths = ['dashboard', 'thread']
+const firstSegment = app?.split('/')[0]
+
+if (!firstSegment || !validPaths.includes(firstSegment)) {
+    return Astro.redirect('/')
+}
+---
+
+<Layout>
+    <App client:only="react" />
+</Layout>
