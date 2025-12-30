@@ -28,14 +28,20 @@ export interface SimpleImageEditorOptions {
     threadId: string
     /** Canvas size in pixels. Defaults to 512 */
     canvasSize?: number
+    /** Initial code to start from (for continuing from existing generation) */
+    initialCode?: string
+    /** Initial image data base64 (for continuing from existing generation) */
+    initialImage?: string
 }
 
 export async function simpleImageEditorAgent(
     instruction: string,
     options: SimpleImageEditorOptions,
 ) {
-    const { threadId } = options
+    const { threadId, initialCode, initialImage } = options
     const canvasSize = options.canvasSize ?? 512
+
+    console.log(`[agent ${threadId}] starting`)
 
     // Update thread status to running
     await db.update(thread).set({ status: 'running' }).where(eq(thread.id, threadId))
@@ -72,15 +78,33 @@ RULES:
 - All methods are sync and chainable
 - Use ctx.method() syntax (the ctx object is provided)`
 
+    const messages: Parameters<typeof generateText>[0]['messages'] = []
+
+    if (initialCode && initialImage) {
+        // Continuing from existing generation
+        messages.push({
+            role: 'user',
+            content: [
+                {
+                    type: 'text',
+                    text: 'Here is the current code and image. Modify it according to my next instruction.',
+                },
+                { type: 'text', text: `Current code:\n\`\`\`javascript\n${initialCode}\n\`\`\`` },
+                { type: 'image', image: Buffer.from(initialImage, 'base64') },
+                { type: 'text', text: `Instruction: ${instruction}` },
+            ],
+        })
+    } else {
+        messages.push({
+            role: 'user',
+            content: instruction,
+        })
+    }
+
     const result = await generateText({
         model: gpt52,
         system: systemPrompt,
-        messages: [
-            {
-                role: 'user',
-                content: instruction,
-            },
-        ],
+        messages,
         tools: {
             executeCode: tool({
                 description:
@@ -89,8 +113,9 @@ RULES:
                     code: z.string().describe('JavaScript code using the DrawingContext API'),
                 }),
                 execute: async ({ code }) => {
+                    console.log(`[agent ${threadId}] executing code`)
                     const buffer = await executeCode(code, canvasSize)
-                    return { buffer, imageData: buffer.toString('base64') }
+                    return { code, buffer, imageData: buffer.toString('base64') }
                 },
                 toModelOutput: (result) => ({
                     type: 'content',
@@ -110,11 +135,16 @@ RULES:
             for (const result of toolResults ?? []) {
                 if (result.toolName === 'executeCode') {
                     stepCount++
-                    const output = result.output as { buffer: Buffer; imageData: string }
+                    const output = result.output as {
+                        code: string
+                        buffer: Buffer
+                        imageData: string
+                    }
                     await db.insert(generation).values({
                         id: nanoid(),
                         threadId,
                         stepNumber: stepCount,
+                        code: output.code,
                         imageData: output.imageData,
                     })
                     console.log(`[${threadId}] Step ${stepCount} saved to DB`)
@@ -123,8 +153,7 @@ RULES:
         },
     })
 
-    console.log(`Final response: ${result.text}`)
-    console.log(`Total steps: ${result.steps.length}`)
+    console.log(`[agent ${threadId}] completed, steps: ${result.steps.length}`)
 
     // Update thread status
     await db.update(thread).set({ status: 'completed' }).where(eq(thread.id, threadId))

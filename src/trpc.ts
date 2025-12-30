@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { auth } from './auth'
@@ -45,7 +45,7 @@ export const appRouter = router({
 
     listThreads: authedProcedure.query(async ({ ctx }) => {
         const threads = await db.query.thread.findMany({
-            where: eq(thread.userId, ctx.user.id),
+            where: and(eq(thread.userId, ctx.user.id), isNull(thread.deletedAt)),
             orderBy: desc(thread.createdAt),
             with: {
                 generations: {
@@ -67,7 +67,7 @@ export const appRouter = router({
         .input(z.object({ threadId: z.string() }))
         .query(async ({ ctx, input }) => {
             const t = await db.query.thread.findFirst({
-                where: eq(thread.id, input.threadId),
+                where: and(eq(thread.id, input.threadId), isNull(thread.deletedAt)),
                 with: {
                     generations: {
                         orderBy: generation.stepNumber,
@@ -110,6 +110,7 @@ export const appRouter = router({
                 await simpleImageEditorAgent(t.prompt, { threadId: input.threadId })
                 return { status: 'completed' }
             } catch (error) {
+                console.error(`[runThread ${input.threadId}] error:`, error)
                 await db
                     .update(thread)
                     .set({ status: 'failed' })
@@ -117,6 +118,56 @@ export const appRouter = router({
                 throw new TRPCError({
                     code: 'INTERNAL_SERVER_ERROR',
                     message: error instanceof Error ? error.message : 'Unknown error',
+                    cause: error,
+                })
+            }
+        }),
+
+    deleteThread: authedProcedure
+        .input(z.object({ threadId: z.string() }))
+        .mutation(async ({ ctx, input }) => {
+            const t = await db.query.thread.findFirst({
+                where: and(eq(thread.id, input.threadId), isNull(thread.deletedAt)),
+            })
+            if (!t || t.userId !== ctx.user.id) {
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Thread not found' })
+            }
+            await db
+                .update(thread)
+                .set({ deletedAt: new Date() })
+                .where(eq(thread.id, input.threadId))
+            return { success: true }
+        }),
+
+    continueFromGeneration: authedProcedure
+        .input(z.object({ generationId: z.string(), prompt: z.string().min(1) }))
+        .mutation(async ({ ctx, input }) => {
+            // Get the generation with its thread
+            const gen = await db.query.generation.findFirst({
+                where: eq(generation.id, input.generationId),
+                with: { thread: true },
+            })
+            if (!gen || gen.thread.userId !== ctx.user.id) {
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Generation not found' })
+            }
+            if (gen.thread.status === 'running') {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Thread already running' })
+            }
+
+            try {
+                await simpleImageEditorAgent(input.prompt, {
+                    threadId: gen.threadId,
+                    initialCode: gen.code,
+                    initialImage: gen.imageData,
+                })
+                return { status: 'completed' }
+            } catch (error) {
+                console.error(`[continueFromGeneration ${input.generationId}] error:`, error)
+                await db.update(thread).set({ status: 'failed' }).where(eq(thread.id, gen.threadId))
+                throw new TRPCError({
+                    code: 'INTERNAL_SERVER_ERROR',
+                    message: error instanceof Error ? error.message : 'Unknown error',
+                    cause: error,
                 })
             }
         }),

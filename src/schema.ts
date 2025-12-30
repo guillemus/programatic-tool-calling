@@ -107,6 +107,7 @@ export const thread = pgTable(
             .defaultNow()
             .$onUpdate(() => new Date())
             .notNull(),
+        deletedAt: timestamp('deleted_at'),
     },
     (table) => [index('thread_userId_idx').on(table.userId)],
 )
@@ -119,6 +120,7 @@ export const generation = pgTable(
             .notNull()
             .references(() => thread.id, { onDelete: 'cascade' }),
         stepNumber: integer('step_number').notNull(),
+        code: text('code').notNull(),
         imageData: text('image_data').notNull(),
         createdAt: timestamp('created_at').defaultNow().notNull(),
     },

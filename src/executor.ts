@@ -194,6 +194,11 @@ export function createDrawingContext(size = 512): DrawingContext & {
 export async function executeCode(code: string, canvasSize = 512): Promise<Buffer> {
     const ctx = createDrawingContext(canvasSize)
     const asyncFn = new Function('ctx', `return (async () => { ${code} })()`)
-    await asyncFn(ctx)
+    try {
+        await asyncFn(ctx)
+    } catch (error) {
+        console.error('[executeCode] code execution failed:', error)
+        throw error
+    }
     return ctx.toPNG()
 }

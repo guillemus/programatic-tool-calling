@@ -10,5 +10,11 @@ export const ALL: APIRoute = async ({ request }) => {
         req: request,
         router: appRouter,
         createContext: () => createContext(request),
+        onError: ({ path, error }) => {
+            console.error(`[trpc ${path}] ${error.code}: ${error.message}`)
+            if (error.cause) {
+                console.error(`[trpc ${path}] cause:`, error.cause)
+            }
+        },
     })
 }

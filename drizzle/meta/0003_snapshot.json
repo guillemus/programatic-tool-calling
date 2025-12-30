@@ -1,6 +1,6 @@
 {
-    "id": "0f370fa0-7dd5-4051-b29f-f496a0af5fda",
-    "prevId": "596bd77a-dc1d-45e9-97d5-0c68158e5e03",
+    "id": "d6501fd1-4a66-46e9-94b9-9564a3484b3d",
+    "prevId": "8a03732d-ac07-4f5d-9379-5aef01b4e557",
     "version": "7",
     "dialect": "postgresql",
     "tables": {
@@ -141,6 +141,12 @@
                 "step_number": {
                     "name": "step_number",
                     "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "code": {
+                    "name": "code",
+                    "type": "text",
                     "primaryKey": false,
                     "notNull": true
                 },
@@ -328,6 +334,12 @@
                     "primaryKey": false,
                     "notNull": true,
                     "default": "now()"
+                },
+                "deleted_at": {
+                    "name": "deleted_at",
+                    "type": "timestamp",
+                    "primaryKey": false,
+                    "notNull": false
                 }
             },
             "indexes": {

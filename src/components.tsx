@@ -3,16 +3,53 @@ import { QueryProvider, useTRPC } from '@/query-client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
-export function LogoutButton() {
+function ProfileDropdown(props: { email: string; image: string | null }) {
+    const [open, setOpen] = useState(false)
+
     async function handleLogout() {
         await authClient.signOut()
         window.location.href = '/'
     }
 
     return (
-        <button onClick={handleLogout} className="btn btn-error">
-            Log out
-        </button>
+        <div className="relative">
+            <button
+                onClick={() => setOpen(!open)}
+                className="w-10 h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors"
+            >
+                {props.image ? (
+                    <img src={props.image} alt="avatar" className="w-full h-full object-cover" />
+                ) : (
+                    <div className="w-full h-full bg-base-300 flex items-center justify-center text-sm">
+                        {props.email[0].toUpperCase()}
+                    </div>
+                )}
+            </button>
+            {open && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+                    <div className="absolute right-0 top-12 z-50 bg-base-200 border border-neutral rounded-lg shadow-lg p-4 min-w-60">
+                        <div className="flex items-center gap-3 mb-4">
+                            {props.image ? (
+                                <img
+                                    src={props.image}
+                                    alt="avatar"
+                                    className="w-10 h-10 rounded-full"
+                                />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center">
+                                    {props.email[0].toUpperCase()}
+                                </div>
+                            )}
+                            <p className="text-sm text-secondary truncate">{props.email}</p>
+                        </div>
+                        <button onClick={handleLogout} className="btn btn-error btn-sm w-full">
+                            Log out
+                        </button>
+                    </div>
+                </>
+            )}
+        </div>
     )
 }
 
@@ -122,66 +159,9 @@ function ThreadCard(props: {
     )
 }
 
-function NewThreadForm(props: { onCreated: (id: string) => void }) {
-    const [prompt, setPrompt] = useState('')
+function ThreadGridContent() {
     const trpc = useTRPC()
-    const queryClient = useQueryClient()
-
-    const createMutation = useMutation({
-        ...trpc.createThread.mutationOptions(),
-        onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
-            props.onCreated(data.id)
-            setPrompt('')
-        },
-    })
-
-    function handleSubmit(e: React.FormEvent) {
-        e.preventDefault()
-        if (!prompt.trim()) return
-        createMutation.mutate({ prompt: prompt.trim() })
-    }
-
-    return (
-        <form onSubmit={handleSubmit} className="flex gap-2">
-            <input
-                type="text"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe an image..."
-                className="input input-bordered flex-1"
-                disabled={createMutation.isPending}
-            />
-            <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={createMutation.isPending || !prompt.trim()}
-            >
-                {createMutation.isPending && 'Creating...'}
-                {!createMutation.isPending && 'Generate'}
-            </button>
-        </form>
-    )
-}
-
-function ThreadGrid() {
-    const trpc = useTRPC()
-    const queryClient = useQueryClient()
     const threadsQuery = useQuery(trpc.listThreads.queryOptions())
-
-    const runMutation = useMutation({
-        ...trpc.runThread.mutationOptions(),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
-        },
-        onError: () => {
-            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
-        },
-    })
-
-    function handleCreated(threadId: string) {
-        runMutation.mutate({ threadId })
-    }
 
     if (threadsQuery.isLoading) {
         return <p className="text-secondary">Loading threads...</p>
@@ -193,29 +173,80 @@ function ThreadGrid() {
 
     const threads = threadsQuery.data ?? []
 
+    if (threads.length === 0) {
+        return (
+            <p className="text-secondary text-center py-12">
+                No generations yet. Describe an image below to get started.
+            </p>
+        )
+    }
+
     return (
-        <div className="space-y-6">
-            <NewThreadForm onCreated={handleCreated} />
-
-            {threads.length === 0 && (
-                <p className="text-secondary text-center py-8">
-                    No generations yet. Create one above!
-                </p>
-            )}
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {threads.map((t) => (
-                    <ThreadCard
-                        key={t.id}
-                        id={t.id}
-                        prompt={t.prompt}
-                        status={t.status}
-                        createdAt={t.createdAt}
-                        thumbnail={t.thumbnail}
-                    />
-                ))}
-            </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {threads.map((t) => (
+                <ThreadCard
+                    key={t.id}
+                    id={t.id}
+                    prompt={t.prompt}
+                    status={t.status}
+                    createdAt={t.createdAt}
+                    thumbnail={t.thumbnail}
+                />
+            ))}
         </div>
+    )
+}
+
+function NewThreadFormStandalone() {
+    const [prompt, setPrompt] = useState('')
+    const trpc = useTRPC()
+    const queryClient = useQueryClient()
+
+    const createMutation = useMutation({
+        ...trpc.createThread.mutationOptions(),
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
+            runMutation.mutate({ threadId: data.id })
+            setPrompt('')
+        },
+    })
+
+    const runMutation = useMutation({
+        ...trpc.runThread.mutationOptions(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
+        },
+        onError: () => {
+            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
+        },
+    })
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!prompt.trim()) return
+        createMutation.mutate({ prompt: prompt.trim() })
+    }
+
+    const isPending = createMutation.isPending || runMutation.isPending
+
+    return (
+        <form onSubmit={handleSubmit} className="flex gap-2">
+            <input
+                type="text"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe an image..."
+                className="input input-bordered flex-1"
+                disabled={isPending}
+            />
+            <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isPending || !prompt.trim()}
+            >
+                {isPending ? 'Creating...' : 'Generate'}
+            </button>
+        </form>
     )
 }
 
@@ -227,7 +258,7 @@ function DashboardContent() {
     if (meQuery.isLoading) {
         return (
             <main className="min-h-screen bg-base-100 text-base-content">
-                <div className="max-w-2xl mx-auto px-6 py-24">
+                <div className="max-w-4xl mx-auto px-6 py-24">
                     <p className="text-secondary">Loading...</p>
                 </div>
             </main>
@@ -241,35 +272,24 @@ function DashboardContent() {
     const user = meQuery.data.user
 
     return (
-        <main className="min-h-screen bg-base-100 text-base-content">
-            <div className="max-w-2xl mx-auto px-6 py-24">
-                <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
-                <p className="mt-4 text-lg text-secondary">Welcome, {user.name || user.email}</p>
-
-                <div className="mt-12">
-                    <div className="card bg-base-200 border border-neutral">
-                        <div className="card-body">
-                            <p className="text-sm text-secondary uppercase tracking-wide">
-                                Account
-                            </p>
-                            <p className="text-base-content">{user.email}</p>
-                            {user.image && (
-                                <img
-                                    src={user.image}
-                                    alt="avatar"
-                                    className="w-16 h-16 rounded-full mt-4"
-                                />
-                            )}
-                        </div>
-                    </div>
+        <main className="min-h-screen bg-base-100 text-base-content flex flex-col">
+            <header className="border-b border-neutral px-6 py-4 flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+                    <p className="text-sm text-secondary">Welcome, {user.name || user.email}</p>
                 </div>
+                <ProfileDropdown email={user.email} image={user.image ?? null} />
+            </header>
 
-                <div className="mt-8">
-                    <ThreadGrid />
+            <div className="flex-1 overflow-auto pb-24">
+                <div className="max-w-4xl mx-auto px-6 py-8">
+                    <ThreadGridContent />
                 </div>
+            </div>
 
-                <div className="mt-12">
-                    <LogoutButton />
+            <div className="fixed bottom-0 left-0 right-0 bg-base-100 border-t border-neutral px-6 py-4">
+                <div className="max-w-4xl mx-auto">
+                    <NewThreadFormStandalone />
                 </div>
             </div>
         </main>
@@ -285,15 +305,35 @@ export function DashboardPage() {
 }
 
 function ThreadDetailContent(props: { threadId: string }) {
+    const [selectedGenId, setSelectedGenId] = useState<string | null>(null)
+    const [prompt, setPrompt] = useState('')
     const trpc = useTRPC()
+    const queryClient = useQueryClient()
+
     const threadQuery = useQuery({
         ...trpc.getThread.queryOptions({ threadId: props.threadId }),
         refetchInterval: (query) => {
             const data = query.state.data
             if (data?.status === 'running' || data?.status === 'pending') {
-                return 5000
+                return 2000
             }
             return false
+        },
+    })
+
+    const continueMutation = useMutation({
+        ...trpc.continueFromGeneration.mutationOptions(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: trpc.getThread.queryKey({ threadId: props.threadId }),
+            })
+            setPrompt('')
+            setSelectedGenId(null)
+        },
+        onError: () => {
+            queryClient.invalidateQueries({
+                queryKey: trpc.getThread.queryKey({ threadId: props.threadId }),
+            })
         },
     })
 
@@ -321,52 +361,105 @@ function ThreadDetailContent(props: { threadId: string }) {
     }
 
     const thread = threadQuery.data
+    const isRunning = thread.status === 'running' || thread.status === 'pending'
 
-    function getEmptyMessage(status: string) {
-        if (status === 'running' || status === 'pending') return 'Generating...'
-        return 'No generations'
+    function handleImageClick(genId: string) {
+        if (isRunning) return
+        setSelectedGenId(genId === selectedGenId ? null : genId)
+    }
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!selectedGenId || !prompt.trim() || isRunning) return
+        continueMutation.mutate({ generationId: selectedGenId, prompt: prompt.trim() })
     }
 
     return (
-        <main className="min-h-screen bg-base-100 text-base-content">
-            <div className="max-w-4xl mx-auto px-6 py-12">
-                <a href="/dashboard" className="btn btn-ghost btn-sm mb-6">
-                    Back
-                </a>
-
-                <div className="flex items-start justify-between gap-4 mb-8">
-                    <div>
-                        <h1 className="text-2xl font-bold">{thread.prompt}</h1>
-                        <p className="text-sm text-secondary mt-1">
-                            {new Date(thread.createdAt).toLocaleString()}
-                        </p>
-                    </div>
-                    <span className={`badge ${getStatusColor(thread.status)}`}>
-                        {thread.status}
-                    </span>
-                </div>
-
-                {thread.generations.length === 0 && (
-                    <p className="text-secondary text-center py-12">
-                        {getEmptyMessage(thread.status)}
-                    </p>
-                )}
-
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {thread.generations.map((gen) => (
-                        <div key={gen.id} className="card bg-base-200 border border-neutral">
-                            <div className="card-body p-3">
-                                <img
-                                    src={`data:image/png;base64,${gen.imageData}`}
-                                    alt={`Step ${gen.stepNumber}`}
-                                    className="w-full aspect-square object-cover rounded"
-                                />
-                                <p className="text-xs text-secondary text-center mt-2">
-                                    Step {gen.stepNumber}
-                                </p>
-                            </div>
+        <main className="min-h-screen bg-base-100 text-base-content flex flex-col">
+            <header className="border-b border-neutral px-6 py-4">
+                <div className="max-w-4xl mx-auto">
+                    <a href="/dashboard" className="btn btn-ghost btn-sm mb-4">
+                        Back
+                    </a>
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold">{thread.prompt}</h1>
+                            <p className="text-sm text-secondary mt-1">
+                                {new Date(thread.createdAt).toLocaleString()}
+                            </p>
                         </div>
-                    ))}
+                        {isRunning && (
+                            <span className="loading loading-spinner loading-md text-primary" />
+                        )}
+                    </div>
+                </div>
+            </header>
+
+            <div className="flex-1 overflow-auto pb-24">
+                <div className="max-w-4xl mx-auto px-6 py-8">
+                    {thread.generations.length === 0 && (
+                        <p className="text-secondary text-center py-12">
+                            {isRunning ? 'Generating...' : 'No generations'}
+                        </p>
+                    )}
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {thread.generations.map((gen) => (
+                            <button
+                                key={gen.id}
+                                type="button"
+                                onClick={() => handleImageClick(gen.id)}
+                                disabled={isRunning}
+                                className={`card bg-base-200 border-2 transition-colors ${
+                                    selectedGenId === gen.id
+                                        ? 'border-primary'
+                                        : 'border-neutral hover:border-secondary'
+                                } ${isRunning ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                                <div className="card-body p-3">
+                                    <img
+                                        src={`data:image/png;base64,${gen.imageData}`}
+                                        alt={`Step ${gen.stepNumber}`}
+                                        className="w-full aspect-square object-cover rounded"
+                                    />
+                                    <p className="text-xs text-secondary text-center mt-2">
+                                        Step {gen.stepNumber}
+                                    </p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="fixed bottom-0 left-0 right-0 bg-base-100 border-t border-neutral px-6 py-4">
+                <div className="max-w-4xl mx-auto">
+                    <form onSubmit={handleSubmit} className="flex gap-2">
+                        <input
+                            type="text"
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder={
+                                selectedGenId
+                                    ? 'Describe the changes...'
+                                    : 'Click an image to edit it'
+                            }
+                            className="input input-bordered flex-1"
+                            disabled={!selectedGenId || isRunning || continueMutation.isPending}
+                        />
+                        <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={
+                                !selectedGenId ||
+                                !prompt.trim() ||
+                                isRunning ||
+                                continueMutation.isPending
+                            }
+                        >
+                            {continueMutation.isPending ? 'Editing...' : 'Edit'}
+                        </button>
+                    </form>
                 </div>
             </div>
         </main>
