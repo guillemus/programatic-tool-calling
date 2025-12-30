@@ -6,6 +6,7 @@ import { auth } from './auth'
 import { simpleImageEditorAgent } from './code-exec'
 import { db } from './db'
 import { generation, thread } from './schema'
+import { DbStorage } from './storage'
 
 export class UnauthorizedError extends TRPCError {
     constructor(message = 'Not authenticated') {
@@ -114,6 +115,7 @@ export const appRouter = router({
                 await simpleImageEditorAgent(t.prompt, {
                     threadId: input.threadId,
                     parentId: null,
+                    storage: new DbStorage(),
                 })
                 return { status: 'completed' }
             } catch (error) {
@@ -167,6 +169,7 @@ export const appRouter = router({
                     parentId: input.generationId,
                     initialCode: gen.code,
                     initialImage: gen.imageData,
+                    storage: new DbStorage(),
                 })
                 return { status: 'completed' }
             } catch (error) {

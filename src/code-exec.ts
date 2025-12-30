@@ -1,9 +1,7 @@
-import { db } from '@/db'
 import { executeCode } from '@/executor'
 import { gpt52 } from '@/providers'
-import { generation, thread } from '@/schema'
+import type { Storage } from '@/storage'
 import { generateText, stepCountIs, tool } from 'ai'
-import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 
@@ -28,6 +26,8 @@ export interface SimpleImageEditorOptions {
     threadId: string
     /** Parent generation ID (null for new thread, genId for branching) */
     parentId: string | null
+    /** Storage strategy for persisting generations */
+    storage: Storage
     /** Canvas size in pixels. Defaults to 512 */
     canvasSize?: number
     /** Initial code to start from (for continuing from existing generation) */
@@ -40,13 +40,12 @@ export async function simpleImageEditorAgent(
     instruction: string,
     options: SimpleImageEditorOptions,
 ) {
-    const { threadId, parentId, initialCode, initialImage } = options
+    const { threadId, parentId, storage, initialCode, initialImage } = options
     const canvasSize = options.canvasSize ?? 512
 
     console.log(`[agent ${threadId}] starting`)
 
-    // Update thread status to running
-    await db.update(thread).set({ status: 'running' }).where(eq(thread.id, threadId))
+    await storage.updateThreadStatus(threadId, 'running')
 
     let lastGenerationId: string | null = parentId
 
@@ -116,20 +115,44 @@ RULES:
                 }),
                 execute: async ({ code }) => {
                     console.log(`[agent ${threadId}] executing code`)
-                    const buffer = await executeCode(code, canvasSize)
-                    return { code, buffer, imageData: buffer.toString('base64') }
+                    try {
+                        const buffer = await executeCode(code, canvasSize)
+                        return {
+                            success: true as const,
+                            code,
+                            buffer,
+                            imageData: buffer.toString('base64'),
+                        }
+                    } catch (err) {
+                        const message = err instanceof Error ? err.message : String(err)
+                        console.log(`[agent ${threadId}] code execution failed: ${message}`)
+                        return { success: false as const, code, error: message }
+                    }
                 },
-                toModelOutput: (result) => ({
-                    type: 'content',
-                    value: [
-                        { type: 'text', text: 'Code executed. Generated image:' },
-                        {
-                            type: 'media',
-                            data: result.output.imageData,
-                            mediaType: 'image/png',
-                        },
-                    ],
-                }),
+                toModelOutput: (result) => {
+                    if (!result.output.success) {
+                        return {
+                            type: 'content',
+                            value: [
+                                {
+                                    type: 'text',
+                                    text: `Code execution failed: ${result.output.error}\n\nFix the code and try again.`,
+                                },
+                            ],
+                        }
+                    }
+                    return {
+                        type: 'content',
+                        value: [
+                            { type: 'text', text: 'Code executed. Generated image:' },
+                            {
+                                type: 'media',
+                                data: result.output.imageData,
+                                mediaType: 'image/png',
+                            },
+                        ],
+                    }
+                },
             }),
         },
         stopWhen: stepCountIs(10),
@@ -137,22 +160,30 @@ RULES:
             for (const result of toolResults ?? []) {
                 if (result.toolName === 'executeCode') {
                     const output = result.output as {
+                        success: boolean
                         code: string
-                        buffer: Buffer
-                        imageData: string
+                        buffer?: Buffer
+                        imageData?: string
+                        error?: string
+                    }
+                    if (!output.success) {
+                        console.log(
+                            `[${threadId}] Skipping save - execution failed: ${output.error}`,
+                        )
+                        continue
                     }
                     const genId = nanoid()
-                    await db.insert(generation).values({
+                    await storage.saveGeneration({
                         id: genId,
                         threadId,
                         parentId: lastGenerationId,
                         type: 'debug',
                         prompt: instruction,
                         code: output.code,
-                        imageData: output.imageData,
+                        imageData: output.imageData!,
                     })
                     lastGenerationId = genId
-                    console.log(`[${threadId}] Generation ${genId} saved to DB`)
+                    console.log(`[${threadId}] Generation ${genId} saved`)
                 }
             }
         },
@@ -162,14 +193,10 @@ RULES:
 
     // Mark last generation as final
     if (lastGenerationId && lastGenerationId !== parentId) {
-        await db
-            .update(generation)
-            .set({ type: 'final' })
-            .where(eq(generation.id, lastGenerationId))
+        await storage.markGenerationAsFinal(lastGenerationId)
     }
 
-    // Update thread status
-    await db.update(thread).set({ status: 'completed' }).where(eq(thread.id, threadId))
+    await storage.updateThreadStatus(threadId, 'completed')
 
     return threadId
 }

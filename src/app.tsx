@@ -1,7 +1,5 @@
-import { BrowserRouter, Routes, Route, Link, useParams, useNavigate } from 'react-router'
-import { QueryProvider } from '@/query-client'
 import { authClient } from '@/auth-client'
-import { useTRPC } from '@/query-client'
+import { QueryProvider, useTRPC } from '@/query-client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     ArrowLeft,
@@ -13,9 +11,11 @@ import {
     GitBranch,
     Image,
     Plus,
+    Trash2,
     X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from 'react-router'
 
 // =============================================================================
 // TYPES
@@ -374,8 +374,8 @@ function GenerationModal(props: {
 
     return (
         <dialog ref={modalRef} className="modal" onClose={handleClose}>
-            <div className="modal-box max-w-5xl p-0">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
+            <div className="modal-box max-w-5xl max-h-[90vh] p-0 flex flex-col">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-base-300 flex-shrink-0">
                     <div className="flex items-center gap-3">
                         {isViewingDebug && (
                             <button
@@ -407,14 +407,14 @@ function GenerationModal(props: {
                         </button>
                     </form>
                 </div>
-                <div className="flex min-h-[500px]">
-                    <div className="w-1/2 border-r border-base-300 flex flex-col">
+                <div className="flex flex-1 min-h-0 overflow-hidden">
+                    <div className="w-1/2 border-r border-base-300 flex flex-col min-h-0">
                         <div className="px-4 py-3 bg-base-200 text-sm font-medium flex items-center gap-2">
                             <Code size={16} />
                             Code
                         </div>
-                        <div className="flex-1 overflow-auto">
-                            <pre className="p-4 text-sm font-mono bg-neutral text-neutral-content h-full whitespace-pre-wrap">
+                        <div className="flex-1 overflow-auto min-h-0">
+                            <pre className="p-4 text-sm font-mono bg-neutral text-neutral-content whitespace-pre-wrap">
                                 {displayGen?.code || '// No code available'}
                             </pre>
                         </div>
@@ -471,7 +471,7 @@ function GenerationModal(props: {
                             </div>
                         )}
                     </div>
-                    <div className="w-1/2 bg-base-200 flex items-center justify-center p-6">
+                    <div className="w-1/2 bg-base-200 flex items-center justify-center p-6 overflow-auto">
                         <div className="w-full aspect-square rounded-lg overflow-hidden bg-base-300 flex items-center justify-center">
                             {displayGen?.imageData ? (
                                 <img
@@ -648,6 +648,7 @@ function ThreadDetailPage() {
     const [selectedGeneration, setSelectedGeneration] = useState<Generation | null>(null)
     const trpc = useTRPC()
     const queryClient = useQueryClient()
+    const navigate = useNavigate()
 
     const threadQuery = useQuery({
         ...trpc.getThread.queryOptions({ threadId: id! }),
@@ -674,6 +675,19 @@ function ThreadDetailPage() {
             })
         },
     })
+
+    const deleteMutation = useMutation({
+        ...trpc.deleteThread.mutationOptions(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
+            navigate('/dashboard')
+        },
+    })
+
+    function handleDelete() {
+        if (!confirm('Delete this thread?')) return
+        deleteMutation.mutate({ threadId: id! })
+    }
 
     if (threadQuery.isLoading) {
         return (
@@ -727,7 +741,7 @@ function ThreadDetailPage() {
                             <div className="flex-1 min-w-0">
                                 <h1 className="font-medium truncate">{thread.prompt}</h1>
                             </div>
-                            <div>
+                            <div className="flex items-center gap-2">
                                 {isRunning ? (
                                     <span className="flex items-center gap-2 text-warning text-sm">
                                         <span className="loading loading-spinner loading-xs" />
@@ -736,6 +750,14 @@ function ThreadDetailPage() {
                                 ) : (
                                     <StatusBadge status={thread.status} />
                                 )}
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={deleteMutation.isPending}
+                                    className="btn btn-ghost btn-sm btn-square text-error hover:bg-error/10"
+                                    title="Delete thread"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -762,8 +784,8 @@ function ThreadDetailPage() {
                                 <div className="mb-4">
                                     <p className="text-sm text-secondary">
                                         {finalGenerations.length} generation
-                                        {finalGenerations.length > 1 ? 's' : ''} - Click to view code
-                                        and edit
+                                        {finalGenerations.length > 1 ? 's' : ''} - Click to view
+                                        code and edit
                                     </p>
                                 </div>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
