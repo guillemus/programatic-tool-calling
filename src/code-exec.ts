@@ -4,8 +4,8 @@ import type { Storage } from '@/storage'
 import { generateText, stepCountIs, tool } from 'ai'
 import { z } from 'zod'
 
-// @ts-expect-error: importing as text
-import interfaceDocs from '@/interface' with { type: 'text' }
+// @ts-expect-error: importing as raw text
+import interfaceDocs from '@/interface.ts?raw'
 
 export interface ImageEditorOptions {
     threadId: string

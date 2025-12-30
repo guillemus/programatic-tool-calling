@@ -142,6 +142,51 @@ export const appRouter = router({
                 .where(eq(thread.id, input.threadId))
             return { success: true }
         }),
+
+    continueThread: authedProcedure
+        .input(z.object({ threadId: z.string(), prompt: z.string().min(1) }))
+        .mutation(async ({ ctx, input }) => {
+            const t = await db.query.thread.findFirst({
+                where: and(eq(thread.id, input.threadId), isNull(thread.deletedAt)),
+                with: {
+                    generations: {
+                        orderBy: desc(generation.createdAt),
+                        limit: 1,
+                    },
+                },
+            })
+            if (!t || t.userId !== ctx.user.id) {
+                throw new TRPCError({ code: 'NOT_FOUND', message: 'Thread not found' })
+            }
+            if (t.status === 'running') {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Thread already running' })
+            }
+
+            const lastCode = t.generations[0]?.code ?? null
+
+            await db.update(thread).set({ status: 'running' }).where(eq(thread.id, input.threadId))
+
+            try {
+                const fullPrompt = lastCode
+                    ? `Current code:\n\`\`\`javascript\n${lastCode}\n\`\`\`\n\nUser request: ${input.prompt}`
+                    : input.prompt
+
+                await imageEditorAgent(fullPrompt, {
+                    threadId: input.threadId,
+                    storage: new DbStorage(),
+                })
+                await db.update(thread).set({ status: 'completed' }).where(eq(thread.id, input.threadId))
+                return { status: 'completed' }
+            } catch (error) {
+                console.error(`[continueThread ${input.threadId}] error:`, error)
+                await db.update(thread).set({ status: 'failed' }).where(eq(thread.id, input.threadId))
+                throw new TRPCError({
+                    code: 'INTERNAL_SERVER_ERROR',
+                    message: error instanceof Error ? error.message : 'Unknown error',
+                    cause: error,
+                })
+            }
+        }),
 })
 
 export type AppRouter = typeof appRouter

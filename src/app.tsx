@@ -32,7 +32,8 @@ function StatusDot(props: { status: string }) {
     if (props.status === 'completed') dotClass = 'bg-success'
     if (props.status === 'running') dotClass = 'bg-warning'
     if (props.status === 'failed') dotClass = 'bg-error'
-    const pulseClass = isPulsing ? 'animate-pulse' : ''
+    let pulseClass = ''
+    if (isPulsing) pulseClass = 'animate-pulse'
     return <span className={`w-2 h-2 rounded-full ${dotClass} ${pulseClass}`} />
 }
 
@@ -46,6 +47,18 @@ function StatusBadge(props: { status: string }) {
             <StatusDot status={props.status} />
             <span className="capitalize">{props.status}</span>
         </span>
+    )
+}
+
+function ProfileAvatar(props: { image: string | null; email: string; size: 'sm' | 'md' }) {
+    const sizeClass = props.size === 'sm' ? 'w-10 h-10' : 'w-10 h-10'
+    if (props.image) {
+        return <img src={props.image} alt="avatar" className={`${sizeClass} rounded-full object-cover`} />
+    }
+    return (
+        <div className={`${sizeClass} rounded-full bg-base-300 flex items-center justify-center text-sm`}>
+            {props.email[0].toUpperCase()}
+        </div>
     )
 }
 
@@ -63,30 +76,14 @@ function ProfileDropdown(props: { email: string; image: string | null }) {
                 onClick={() => setOpen(!open)}
                 className="w-10 h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-primary transition-colors"
             >
-                {props.image ? (
-                    <img src={props.image} alt="avatar" className="w-full h-full object-cover" />
-                ) : (
-                    <div className="w-full h-full bg-base-300 flex items-center justify-center text-sm">
-                        {props.email[0].toUpperCase()}
-                    </div>
-                )}
+                <ProfileAvatar image={props.image} email={props.email} size="sm" />
             </button>
             {open && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
                     <div className="absolute right-0 top-12 z-50 bg-base-200 border border-base-300 rounded-lg shadow-lg p-4 min-w-60">
                         <div className="flex items-center gap-3 mb-4">
-                            {props.image ? (
-                                <img
-                                    src={props.image}
-                                    alt="avatar"
-                                    className="w-10 h-10 rounded-full"
-                                />
-                            ) : (
-                                <div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center">
-                                    {props.email[0].toUpperCase()}
-                                </div>
-                            )}
+                            <ProfileAvatar image={props.image} email={props.email} size="md" />
                             <p className="text-sm text-secondary truncate">{props.email}</p>
                         </div>
                         <button onClick={handleLogout} className="btn btn-error btn-sm w-full">
@@ -167,8 +164,14 @@ function ThreadCard(props: {
     )
 }
 
-function GenerationModal(props: { generation: Generation | null; onClose: () => void }) {
+function GenerationModal(props: {
+    generation: Generation | null
+    onClose: () => void
+    onEdit: (prompt: string) => void
+    isRunning: boolean
+}) {
     const modalRef = useRef<HTMLDialogElement>(null)
+    const [editPrompt, setEditPrompt] = useState('')
 
     useEffect(() => {
         if (props.generation) {
@@ -177,6 +180,14 @@ function GenerationModal(props: { generation: Generation | null; onClose: () => 
             modalRef.current?.close()
         }
     }, [props.generation])
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault()
+        if (!editPrompt.trim() || props.isRunning) return
+        props.onEdit(editPrompt.trim())
+        setEditPrompt('')
+        props.onClose()
+    }
 
     if (!props.generation) {
         return <dialog ref={modalRef} className="modal" />
@@ -210,14 +221,38 @@ function GenerationModal(props: { generation: Generation | null; onClose: () => 
                             </pre>
                         </div>
                     </div>
-                    <div className="w-1/2 bg-base-200 flex items-center justify-center p-6 overflow-auto">
-                        <div className="w-full aspect-square rounded-lg overflow-hidden bg-base-300 flex items-center justify-center">
-                            <img
-                                src={`data:image/png;base64,${gen.imageData}`}
-                                alt=""
-                                className="w-full h-full object-cover"
-                            />
+                    <div className="w-1/2 bg-base-200 flex flex-col">
+                        <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
+                            <div className="w-full aspect-square rounded-lg overflow-hidden bg-base-300 flex items-center justify-center">
+                                <img
+                                    src={`data:image/png;base64,${gen.imageData}`}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
                         </div>
+                        <form onSubmit={handleSubmit} className="p-4 border-t border-base-300">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={editPrompt}
+                                    onChange={(e) => setEditPrompt(e.target.value)}
+                                    placeholder="Describe changes..."
+                                    disabled={props.isRunning}
+                                    className="flex-1 px-3 py-2 bg-white border border-base-300 rounded-lg text-sm placeholder:text-secondary/60 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={!editPrompt.trim() || props.isRunning}
+                                    className="btn btn-primary btn-sm"
+                                >
+                                    {props.isRunning && (
+                                        <span className="loading loading-spinner loading-xs" />
+                                    )}
+                                    {!props.isRunning && 'Edit'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -294,22 +329,9 @@ function DashboardPage() {
 
 function NewThreadPage() {
     const [prompt, setPrompt] = useState('')
-    const inputRef = useRef<HTMLTextAreaElement>(null)
     const navigate = useNavigate()
     const trpc = useTRPC()
     const queryClient = useQueryClient()
-
-    useEffect(() => {
-        inputRef.current?.focus()
-    }, [])
-
-    const createMutation = useMutation({
-        ...trpc.createThread.mutationOptions(),
-        onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
-            runMutation.mutate({ threadId: data.id })
-        },
-    })
 
     const runMutation = useMutation({
         ...trpc.runThread.mutationOptions(),
@@ -321,11 +343,14 @@ function NewThreadPage() {
         },
     })
 
-    useEffect(() => {
-        if (createMutation.data) {
-            navigate(`/thread/${createMutation.data.id}`)
-        }
-    }, [createMutation.data, navigate])
+    const createMutation = useMutation({
+        ...trpc.createThread.mutationOptions(),
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
+            runMutation.mutate({ threadId: data.id })
+            navigate(`/thread/${data.id}`)
+        },
+    })
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
@@ -352,7 +377,7 @@ function NewThreadPage() {
                     </div>
                     <form onSubmit={handleSubmit}>
                         <textarea
-                            ref={inputRef}
+                            autoFocus
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             placeholder="A pelican riding a bicycle through a sunny park..."
@@ -399,6 +424,18 @@ function ThreadDetailPage() {
         },
     })
 
+    const continueMutation = useMutation({
+        ...trpc.continueThread.mutationOptions(),
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: trpc.getThread.queryKey({ threadId: id! }) })
+            queryClient.invalidateQueries({ queryKey: trpc.listThreads.queryKey() })
+        },
+    })
+
+    function handleEdit(prompt: string) {
+        continueMutation.mutate({ threadId: id!, prompt })
+    }
+
     function handleDelete() {
         if (!confirm('Delete this thread?')) return
         deleteMutation.mutate({ threadId: id! })
@@ -428,7 +465,7 @@ function ThreadDetailPage() {
     }
 
     const thread = threadQuery.data
-    const isRunning = thread.status === 'running' || thread.status === 'pending'
+    const isRunning = thread.status === 'running' || thread.status === 'pending' || continueMutation.isPending
     const generations = thread.generations as Generation[]
 
     return (
@@ -444,14 +481,7 @@ function ThreadDetailPage() {
                                 <h1 className="font-medium truncate">{thread.prompt}</h1>
                             </div>
                             <div className="flex items-center gap-2">
-                                {isRunning ? (
-                                    <span className="flex items-center gap-2 text-warning text-sm">
-                                        <span className="loading loading-spinner loading-xs" />
-                                        Generating...
-                                    </span>
-                                ) : (
-                                    <StatusBadge status={thread.status} />
-                                )}
+                                <StatusBadge status={isRunning ? 'running' : thread.status} />
                                 <button
                                     onClick={handleDelete}
                                     disabled={deleteMutation.isPending}
@@ -466,16 +496,18 @@ function ThreadDetailPage() {
                 </header>
                 <main className="flex-1 overflow-auto">
                     <div className="max-w-6xl mx-auto px-6 py-6">
-                        {generations.length === 0 ? (
+                        {generations.length === 0 && (
                             <div className="text-center py-20">
                                 {isRunning && (
                                     <span className="loading loading-spinner loading-lg text-primary mb-4" />
                                 )}
                                 <p className="text-secondary">
-                                    {isRunning ? 'Generating your image...' : 'No generations yet'}
+                                    {isRunning && 'Generating your image...'}
+                                    {!isRunning && 'No generations yet'}
                                 </p>
                             </div>
-                        ) : (
+                        )}
+                        {generations.length > 0 && (
                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                 {generations.map((gen) => (
                                     <button
@@ -503,8 +535,11 @@ function ThreadDetailPage() {
                 </main>
             </div>
             <GenerationModal
+                key={selectedGeneration?.id}
                 generation={selectedGeneration}
                 onClose={() => setSelectedGeneration(null)}
+                onEdit={handleEdit}
+                isRunning={isRunning}
             />
         </>
     )
