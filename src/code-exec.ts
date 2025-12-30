@@ -26,6 +26,8 @@ import interfaceDocs from '@/interface' with { type: 'text' }
 export interface SimpleImageEditorOptions {
     /** Thread ID to save generations to */
     threadId: string
+    /** Parent generation ID (null for new thread, genId for branching) */
+    parentId: string | null
     /** Canvas size in pixels. Defaults to 512 */
     canvasSize?: number
     /** Initial code to start from (for continuing from existing generation) */
@@ -38,7 +40,7 @@ export async function simpleImageEditorAgent(
     instruction: string,
     options: SimpleImageEditorOptions,
 ) {
-    const { threadId, initialCode, initialImage } = options
+    const { threadId, parentId, initialCode, initialImage } = options
     const canvasSize = options.canvasSize ?? 512
 
     console.log(`[agent ${threadId}] starting`)
@@ -46,7 +48,7 @@ export async function simpleImageEditorAgent(
     // Update thread status to running
     await db.update(thread).set({ status: 'running' }).where(eq(thread.id, threadId))
 
-    let stepCount = 0
+    let lastGenerationId: string | null = parentId
 
     const systemPrompt = `You are an image generation assistant. You write JavaScript code to create images using the DrawingContext API.
 
@@ -134,26 +136,37 @@ RULES:
         onStepFinish: async ({ toolResults }) => {
             for (const result of toolResults ?? []) {
                 if (result.toolName === 'executeCode') {
-                    stepCount++
                     const output = result.output as {
                         code: string
                         buffer: Buffer
                         imageData: string
                     }
+                    const genId = nanoid()
                     await db.insert(generation).values({
-                        id: nanoid(),
+                        id: genId,
                         threadId,
-                        stepNumber: stepCount,
+                        parentId: lastGenerationId,
+                        type: 'debug',
+                        prompt: instruction,
                         code: output.code,
                         imageData: output.imageData,
                     })
-                    console.log(`[${threadId}] Step ${stepCount} saved to DB`)
+                    lastGenerationId = genId
+                    console.log(`[${threadId}] Generation ${genId} saved to DB`)
                 }
             }
         },
     })
 
     console.log(`[agent ${threadId}] completed, steps: ${result.steps.length}`)
+
+    // Mark last generation as final
+    if (lastGenerationId && lastGenerationId !== parentId) {
+        await db
+            .update(generation)
+            .set({ type: 'final' })
+            .where(eq(generation.id, lastGenerationId))
+    }
 
     // Update thread status
     await db.update(thread).set({ status: 'completed' }).where(eq(thread.id, threadId))

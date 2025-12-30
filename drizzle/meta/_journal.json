@@ -29,6 +29,13 @@
             "when": 1767028648007,
             "tag": "0003_cool_power_man",
             "breakpoints": true
+        },
+        {
+            "idx": 4,
+            "version": "7",
+            "when": 1767100259134,
+            "tag": "0004_confused_mauler",
+            "breakpoints": true
         }
     ]
 }

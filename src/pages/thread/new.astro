@@ -1,0 +1,10 @@
+---
+import { NewThreadPage } from '@/components'
+import Layout from '@/layout.astro'
+
+export const prerender = false
+---
+
+<Layout>
+    <NewThreadPage client:load />
+</Layout>

@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm'
-import { boolean, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 export const user = pgTable('user', {
     id: text('id').primaryKey(),
@@ -119,12 +119,17 @@ export const generation = pgTable(
         threadId: text('thread_id')
             .notNull()
             .references(() => thread.id, { onDelete: 'cascade' }),
-        stepNumber: integer('step_number').notNull(),
+        parentId: text('parent_id'),
+        type: text('type').notNull().default('final'),
+        prompt: text('prompt'),
         code: text('code').notNull(),
         imageData: text('image_data').notNull(),
         createdAt: timestamp('created_at').defaultNow().notNull(),
     },
-    (table) => [index('generation_threadId_idx').on(table.threadId)],
+    (table) => [
+        index('generation_threadId_idx').on(table.threadId),
+        index('generation_parentId_idx').on(table.parentId),
+    ],
 )
 
 export const threadRelations = relations(thread, ({ one, many }) => ({
@@ -135,9 +140,15 @@ export const threadRelations = relations(thread, ({ one, many }) => ({
     generations: many(generation),
 }))
 
-export const generationRelations = relations(generation, ({ one }) => ({
+export const generationRelations = relations(generation, ({ one, many }) => ({
     thread: one(thread, {
         fields: [generation.threadId],
         references: [thread.id],
     }),
+    parent: one(generation, {
+        fields: [generation.parentId],
+        references: [generation.id],
+        relationName: 'generationTree',
+    }),
+    children: many(generation, { relationName: 'generationTree' }),
 }))

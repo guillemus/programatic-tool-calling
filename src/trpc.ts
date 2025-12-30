@@ -48,19 +48,23 @@ export const appRouter = router({
             where: and(eq(thread.userId, ctx.user.id), isNull(thread.deletedAt)),
             orderBy: desc(thread.createdAt),
             with: {
-                generations: {
-                    orderBy: desc(generation.stepNumber),
-                    limit: 1,
-                },
+                generations: true,
             },
         })
-        return threads.map((t) => ({
-            id: t.id,
-            prompt: t.prompt,
-            status: t.status,
-            createdAt: t.createdAt,
-            thumbnail: t.generations[0]?.imageData ?? null,
-        }))
+        return threads.map((t) => {
+            const finals = t.generations.filter((g) => g.type === 'final')
+            const latestFinal = finals.sort(
+                (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+            )[0]
+            return {
+                id: t.id,
+                prompt: t.prompt,
+                status: t.status,
+                createdAt: t.createdAt,
+                thumbnail: latestFinal?.imageData ?? null,
+                finalCount: finals.length,
+            }
+        })
     }),
 
     getThread: authedProcedure
@@ -70,7 +74,7 @@ export const appRouter = router({
                 where: and(eq(thread.id, input.threadId), isNull(thread.deletedAt)),
                 with: {
                     generations: {
-                        orderBy: generation.stepNumber,
+                        orderBy: generation.createdAt,
                     },
                 },
             })
@@ -107,7 +111,10 @@ export const appRouter = router({
             }
 
             try {
-                await simpleImageEditorAgent(t.prompt, { threadId: input.threadId })
+                await simpleImageEditorAgent(t.prompt, {
+                    threadId: input.threadId,
+                    parentId: null,
+                })
                 return { status: 'completed' }
             } catch (error) {
                 console.error(`[runThread ${input.threadId}] error:`, error)
@@ -157,6 +164,7 @@ export const appRouter = router({
             try {
                 await simpleImageEditorAgent(input.prompt, {
                     threadId: gen.threadId,
+                    parentId: input.generationId,
                     initialCode: gen.code,
                     initialImage: gen.imageData,
                 })

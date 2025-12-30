@@ -21,33 +21,33 @@
     name: 'light';
     default: true;
 
-    /* Base colors - blue-tinted dark grays */
-    --color-base-100: oklch(18% 0.02 250);
-    --color-base-200: oklch(15% 0.02 250);
-    --color-base-300: oklch(12% 0.02 250);
-    --color-base-content: oklch(90% 0.01 250);
+    /* Base colors - light theme */
+    --color-base-100: oklch(95% 0.01 250);
+    --color-base-200: oklch(90% 0.01 250);
+    --color-base-300: oklch(85% 0.01 250);
+    --color-base-content: oklch(20% 0.01 250);
 
-    /* Primary - muted professional blue */
-    --color-primary: oklch(55% 0.15 240);
-    --color-primary-content: oklch(98% 0.01 250);
+    /* Primary - green */
+    --color-primary: oklch(55% 0.18 145);
+    --color-primary-content: oklch(98% 0.01 145);
 
-    /* Secondary - slate blue */
-    --color-secondary: oklch(45% 0.08 250);
+    /* Secondary - muted gray */
+    --color-secondary: oklch(50% 0.02 250);
     --color-secondary-content: oklch(95% 0.01 250);
 
-    /* Accent - subtle cyan/teal */
+    /* Accent - subtle teal */
     --color-accent: oklch(60% 0.12 200);
     --color-accent-content: oklch(15% 0.02 200);
 
-    /* Neutral - blue-gray */
-    --color-neutral: oklch(25% 0.02 250);
-    --color-neutral-content: oklch(85% 0.01 250);
+    /* Neutral - dark for code blocks */
+    --color-neutral: oklch(20% 0.02 250);
+    --color-neutral-content: oklch(90% 0.01 250);
 
     /* States */
     --color-info: oklch(60% 0.15 240);
     --color-info-content: oklch(98% 0.01 240);
-    --color-success: oklch(60% 0.15 160);
-    --color-success-content: oklch(15% 0.02 160);
+    --color-success: oklch(55% 0.18 145);
+    --color-success-content: oklch(98% 0.01 145);
     --color-warning: oklch(70% 0.15 80);
     --color-warning-content: oklch(15% 0.02 80);
     --color-error: oklch(55% 0.2 25);
